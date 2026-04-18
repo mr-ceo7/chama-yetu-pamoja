@@ -209,80 +209,48 @@ function TipTable({
 
 function PremiumPlansPreview({
   paidTiers,
-  pendingPremium,
-  premiumUnlocked,
   onUnlock,
 }: {
   paidTiers: TierConfig[];
-  pendingPremium: number;
-  premiumUnlocked: boolean;
   onUnlock: () => void;
 }) {
   return (
-    <div className="mb-8 rounded-sm border-2 border-zinc-800 bg-zinc-950/90 shadow-[4px_4px_0_rgb(39,39,42)] overflow-hidden">
-      <div className="border-b border-zinc-800 bg-zinc-900/70 p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-amber-400">Premium Plans Board</p>
-            <h2 className="mt-2 text-xl font-black uppercase tracking-wide text-white">Unlock the full premium board</h2>
-            <p className="mt-2 max-w-2xl text-sm text-zinc-300">
-              {premiumUnlocked
-                ? 'Your account can already access the premium board. Plans remain visible here for reference.'
-                : 'One premium subscription unlocks every paid pick on the board. No extra category switches.'}
-            </p>
-          </div>
-          <button
-            onClick={onUnlock}
-            className="inline-flex items-center justify-center gap-2 rounded-sm border-2 border-amber-600 bg-amber-500 px-4 py-3 text-sm font-black uppercase tracking-widest text-zinc-950 shadow-[4px_4px_0_rgb(217,119,6)] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(217,119,6)]"
-          >
-            <TrendingUp className="w-4 h-4" />
-            {premiumUnlocked ? 'Open Plans' : 'View Plans'}
-          </button>
-        </div>
-      </div>
-
-      <div className="p-2 sm:p-5 border-b border-zinc-800">
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-4">
-          {paidTiers.map((tier) => {
-            const Icon = PLAN_ICONS[tier.id] || Crown;
-            return (
-              <div
-                key={tier.id}
-                className={`relative rounded-sm border sm:border-2 p-2 sm:p-4 flex flex-col items-center text-center sm:items-start sm:text-left shadow-[2px_2px_0_rgb(39,39,42)] sm:shadow-[4px_4px_0_rgb(39,39,42)] ${
-                  tier.popular
-                    ? 'border-amber-500/50 bg-amber-500/10'
-                    : 'border-zinc-800 bg-zinc-900/70'
-                }`}
-              >
-                {tier.popular && (
-                  <span className="absolute -top-1.5 right-1 sm:right-3 sm:top-3 rounded-sm bg-amber-500 px-1 py-0.5 sm:px-2 sm:py-1 text-[7px] sm:text-[9px] font-black uppercase tracking-tight sm:tracking-widest text-zinc-950 shadow-md">
-                    🔥 Best
-                  </span>
-                )}
-                <div className="mb-2 sm:mb-4 inline-flex rounded-md sm:rounded-sm bg-zinc-950 p-1.5 sm:p-2 text-amber-400 shadow-inner">
-                  <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
-                </div>
-                <p className="text-[10px] sm:text-lg font-black uppercase tracking-tighter sm:tracking-wide text-white leading-tight drop-shadow-sm line-clamp-2">{tier.name}</p>
-                <p className="mt-2 hidden sm:block min-h-[40px] text-xs text-zinc-400 leading-relaxed">{tier.description}</p>
-                <div className="mt-auto w-full pt-2 sm:mt-5 sm:border-t sm:border-zinc-800 sm:pt-4">
-                  <p className="text-sm sm:text-2xl font-black text-amber-400 whitespace-nowrap">
-                    <span className="text-[9px] sm:text-sm text-amber-500/70 mr-0.5">{tier.currency_symbol || 'KES'}</span>
-                    {tier.price.toLocaleString()}
-                  </p>
-                  <p className="mt-0.5 sm:mt-1 text-[8px] sm:text-[11px] font-bold uppercase tracking-widest text-zinc-500 whitespace-nowrap">
-                    {tier.durationDays} days
-                  </p>
-                </div>
+    <div className="mb-6">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-4">
+        {paidTiers.map((tier) => {
+          const Icon = PLAN_ICONS[tier.id] || Crown;
+          return (
+            <button
+              key={tier.id}
+              onClick={onUnlock}
+              className={`relative rounded-sm border sm:border-2 p-2 sm:p-4 flex flex-col items-center text-center sm:items-start text-left shadow-[2px_2px_0_rgb(39,39,42)] sm:shadow-[4px_4px_0_rgb(39,39,42)] transition-all hover:-translate-y-1 active:translate-y-0 focus:outline-none ${
+                tier.popular
+                  ? 'border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20'
+                  : 'border-zinc-800 bg-zinc-900/70 hover:bg-zinc-800'
+              }`}
+            >
+              {tier.popular && (
+                <span className="absolute -top-1.5 right-1 sm:right-3 sm:top-3 rounded-sm bg-amber-500 px-1 py-0.5 sm:px-2 sm:py-1 text-[7px] sm:text-[9px] font-black uppercase tracking-tight sm:tracking-widest text-zinc-950 shadow-md">
+                  🔥 Best
+                </span>
+              )}
+              <div className="mb-2 sm:mb-4 inline-flex rounded-md sm:rounded-sm bg-zinc-950 p-1.5 sm:p-2 text-amber-400 shadow-inner">
+                <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="bg-zinc-950 px-5 py-4">
-        <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-          Choose any plan to unlock the same premium board. Longer plans only extend your access window.
-        </p>
+              <p className="text-[10px] sm:text-lg font-black uppercase tracking-tighter sm:tracking-wide text-white leading-tight drop-shadow-sm line-clamp-2">{tier.name}</p>
+              <p className="mt-2 hidden sm:block min-h-[40px] text-xs text-zinc-400 leading-relaxed text-left">{tier.description}</p>
+              <div className="mt-auto w-full pt-2 sm:mt-5 sm:border-t sm:border-zinc-800 sm:pt-4 text-center sm:text-left">
+                <p className="text-sm sm:text-2xl font-black text-amber-400 whitespace-nowrap">
+                  <span className="text-[9px] sm:text-sm text-amber-500/70 mr-0.5">{tier.currency_symbol || 'KES'}</span>
+                  {tier.price.toLocaleString()}
+                </p>
+                <p className="mt-0.5 sm:mt-1 text-[8px] sm:text-[11px] font-bold uppercase tracking-widest text-zinc-500 whitespace-nowrap">
+                  {tier.durationDays} days
+                </p>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -545,8 +513,6 @@ export function TipsPage() {
           {activeTab === 'premium' && paidTiers.length > 0 && (
             <PremiumPlansPreview
               paidTiers={paidTiers}
-              pendingPremium={pendingPremium}
-              premiumUnlocked={premiumUnlocked}
               onUnlock={() => {
                 if (!user) setShowAuthModal(true);
                 else setShowPricingModal(true);
