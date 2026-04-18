@@ -121,8 +121,8 @@ class WebhookHandler(BaseHTTPRequestHandler):
                 return
             try:
                 p = json.loads(body)
-                if p.get('ref','') != 'refs/heads/main':
-                    self._respond(200, 'Ignored: not main')
+                if p.get('ref','') != 'refs/heads/master':
+                    self._respond(200, 'Ignored: not master')
                     return
             except: pass
             subprocess.Popen([DEPLOY_SCRIPT], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
