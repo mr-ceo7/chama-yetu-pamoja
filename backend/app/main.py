@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 from app.models import user, tip, jackpot, subscription, payment, ad, notification, campaign  # noqa: F401
 
 # Import routers
-from app.routers import auth, tips, jackpots, payments, subscriptions, admin, notifications, campaigns, internal, seo
+from app.routers import auth, tips, payments, subscriptions, admin, notifications, campaigns, internal, seo
 
 
 async def seed_default_ads():
@@ -85,7 +85,7 @@ async def seed_default_tiers():
                 "description": "5 days of immediate full access to all premium tips and odds.",
                 "price": 200.0,
                 "duration_days": 5,
-                "categories": ["free", "2+", "4+", "gg", "10+", "vip"],
+                "categories": ["free", "premium"],
                 "popular": False,
             },
             {
@@ -94,7 +94,7 @@ async def seed_default_tiers():
                 "description": "10 days of full access to all our premium football predictions.",
                 "price": 500.0,
                 "duration_days": 10,
-                "categories": ["free", "2+", "4+", "gg", "10+", "vip"],
+                "categories": ["free", "premium"],
                 "popular": True,
             },
             {
@@ -103,36 +103,12 @@ async def seed_default_tiers():
                 "description": "Full 30 days of VIP access. Best value for serious players.",
                 "price": 1000.0,
                 "duration_days": 30,
-                "categories": ["free", "2+", "4+", "gg", "10+", "vip"],
+                "categories": ["free", "premium"],
                 "popular": False,
             }
         ]
         for val in tiers_data:
             session.add(SubscriptionTier(**val))
-        await session.commit()
-
-async def seed_default_jackpots():
-    from sqlalchemy import select
-    from app.database import AsyncSessionLocal
-    from app.models.jackpot import Jackpot
-    
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(select(Jackpot).limit(1))
-        if result.scalar_one_or_none() is not None:
-            return  # Already seeded or has data
-
-        # Minimal placeholder — admin adds matches and variations via UI
-        jackpots_data = [
-            {
-                "type": "midweek",
-                "dc_level": 3,
-                "price": 99.0,
-                "matches": [],
-                "variations": [],
-            }
-        ]
-        for val in jackpots_data:
-            session.add(Jackpot(**val))
         await session.commit()
 
 import asyncio
@@ -269,7 +245,6 @@ async def lifespan(app: FastAPI):
         
     await seed_default_ads()
     await seed_default_tiers()
-    await seed_default_jackpots()
     
     yield
     
@@ -299,7 +274,6 @@ app.add_middleware(
 # ── Register routers ────────────────────────────────────────
 app.include_router(auth.router)
 app.include_router(tips.router)
-app.include_router(jackpots.router)
 app.include_router(payments.router)
 app.include_router(subscriptions.router)
 app.include_router(admin.router)

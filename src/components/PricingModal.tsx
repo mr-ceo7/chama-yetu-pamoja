@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Check, Shield, Zap, Star, Crown, Smartphone, CreditCard, Wallet, Lock, AlertCircle, ArrowRight } from 'lucide-react';
+import { X, Check, Shield, Zap, Star, Crown, Smartphone, CreditCard, Wallet, Lock } from 'lucide-react';
 import { useUser } from '../context/UserContext';
-import { getPricingTiers, CATEGORY_LABELS, hasAccessToCategory, type TierConfig, type SubscriptionTier } from '../services/pricingService';
+import { getPricingTiers, type TierConfig, type SubscriptionTier } from '../services/pricingService';
 import { paymentService } from '../services/paymentService';
 import { toast } from 'sonner';
 
@@ -72,12 +72,7 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
       if (targetTierId && data.length > 0) {
         const directTier = data.find(t => t.id === targetTierId) || data[0];
         setSelectedTier(directTier);
-      } else if (targetCategory && data.length > 0) {
-        const validTiers = data.filter(t => t.categories.includes(targetCategory));
-        validTiers.sort((a,b) => a.categories.length - b.categories.length);
-        const autoTier = validTiers[0] || data.find(t => t.id === '30day') || data[0];
-        setSelectedTier(autoTier);
-      } else if (!targetCategory && data.length > 0) {
+      } else if (data.length > 0) {
         const premiumTier = data.find(t => t.id === '30day') || data[0];
         setSelectedTier(premiumTier);
       }
@@ -104,7 +99,7 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
           setSelectedMethod('mpesa');
         });
     }
-  }, [isOpen, targetCategory, targetTierId]);
+  }, [isOpen, targetTierId]);
 
   // Polling for payment status
   useEffect(() => {
@@ -252,25 +247,34 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                   <motion.div key="selection" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
                     <div className="mb-3">
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{targetCategory || targetTierId ? 'Selected Plan' : 'Choose Plan'}</h3>
-                        {(targetCategory || targetTierId) && (
+                        <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{targetTierId ? 'Selected Plan' : 'Choose Plan'}</h3>
+                        {targetTierId && (
                           <button onClick={() => setShowAllTiers(prev => !prev)} className="text-[10px] text-blue-400 hover:text-emerald-300 font-bold uppercase tracking-wider">
                             {showAllTiers ? 'Show Best' : 'View All Plans'}
                           </button>
                         )}
                       </div>
+                      <div className="rounded-sm border-2 border-zinc-800 bg-zinc-900/40 p-3 shadow-[4px_4px_0_rgb(39,39,42)]">
+                      <div className="mb-3 flex items-start justify-between gap-3 border-b border-zinc-800 pb-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-amber-400">Premium Plans Board</p>
+                          <p className="mt-1 text-xs text-zinc-400">Same premium board, different access durations.</p>
+                        </div>
+                        <div className="rounded-sm border border-zinc-800 bg-zinc-950 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                          3 Plans
+                        </div>
+                      </div>
                       <div className="space-y-2">
                       {tiers.filter(t => {
                         if (t.id === 'free') return false; // never show the free tier as a purchasable option
                         // If opened generically (no target), show only the 3 bundle plans
-                        if (!targetCategory && !targetTierId) return t.id === '5day' || t.id === '10day' || t.id === '30day';
+                        if (!targetTierId) return t.id === '5day' || t.id === '10day' || t.id === '30day';
                         // If user toggled "View All Plans", show all paid tiers
                         if (showAllTiers) return true;
                         // Show the selected tier, or fall back to matching by target
                         if (selectedTier) return selectedTier.id === t.id;
                         // selectedTier not yet set — match directly
                         if (targetTierId) return t.id === targetTierId;
-                        if (targetCategory) return t.categories.includes(targetCategory);
                         return true;
                       }).map(tier => {
                         const Icon = TIER_ICONS[tier.id] || Zap;
@@ -282,10 +286,10 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                           <button
                             key={tier.id}
                             onClick={() => setSelectedTier(tier)}
-                            className={`w-full flex items-center gap-3 p-2.5 rounded-sm border-2 transition-all text-left ${
+                            className={`w-full flex items-center gap-3 p-3 rounded-sm border-2 transition-all text-left ${
                               isSelected 
                                 ? 'border-amber-500 bg-amber-500/10 shadow-[3px_3px_0_rgba(245,158,11,0.2)]' 
-                                : 'border-zinc-800 hover:border-zinc-700 bg-zinc-800/30'
+                                : 'border-zinc-800 hover:border-zinc-700 bg-zinc-950/70 shadow-[3px_3px_0_rgb(39,39,42)]'
                             }`}
                           >
                             <div className={`p-1.5 rounded-sm shrink-0 ${isSelected ? 'bg-amber-500 text-black' : 'bg-zinc-800 text-zinc-400'}`}>
@@ -295,12 +299,10 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                               <div className="flex items-center gap-2">
                                 <span className="font-bold text-white text-sm">{tier.name}</span>
                                 {tier.popular && (
-                                  <span className="bg-amber-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-sm uppercase">Popular</span>
+                                  <span className="bg-amber-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Popular</span>
                                 )}
                               </div>
-                              <div className="text-[10px] text-zinc-500 truncate">
-                                {tier.categories.filter(c => c !== 'free').map(c => CATEGORY_LABELS[c]?.label || c).join(', ')}
-                              </div>
+                              <div className="mt-0.5 text-[10px] text-zinc-500 truncate">{tier.description}</div>
                             </div>
                             <div className="text-right shrink-0">
                               {originalPrice ? (
@@ -314,17 +316,8 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                         );
                       })}
                       </div>
-                    </div>
-
-                    {targetCategory && selectedTier && !selectedTier.categories.includes(targetCategory) && (
-                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 mb-3 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                        <p className="text-[11px] text-amber-100/70 flex-1">
-                          <span className="text-white font-bold">{CATEGORY_LABELS[targetCategory].label}</span> is not included in this plan.
-                        </p>
-                        <button onClick={() => setSelectedTier(tiers.filter(t => t.categories.includes(targetCategory)).sort((a,b) => a.categories.length - b.categories.length)[0] || selectedTier)} className="text-[10px] font-bold text-amber-400 uppercase shrink-0 flex items-center gap-1">Fix <ArrowRight className="w-3 h-3"/></button>
                       </div>
-                    )}
+                    </div>
 
                     <div className="mb-3">
                       <div className="flex items-center justify-between mb-2">
@@ -416,7 +409,7 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                     </div>
                     <h3 className="text-2xl font-black text-white mb-2 uppercase tracking-wide">Access Unlocked!</h3>
                     <p className="text-zinc-400 text-sm max-w-xs mb-8">Payment confirmed. Your premium access has been activated instantly.</p>
-                    <button onClick={onClose} className="w-full bg-amber-500 text-black font-black py-4 rounded-sm border-2 border-amber-600 shadow-[4px_4px_0_rgb(217,119,6)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(217,119,6)] transition-all flex items-center justify-center gap-2 uppercase tracking-wider">Start Winning <ArrowRight className="w-5 h-5" /></button>
+                    <button onClick={onClose} className="w-full bg-amber-500 text-black font-black py-4 rounded-sm border-2 border-amber-600 shadow-[4px_4px_0_rgb(217,119,6)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(217,119,6)] transition-all flex items-center justify-center gap-2 uppercase tracking-wider">Start Winning</button>
                   </motion.div>
                 )}
               </AnimatePresence>

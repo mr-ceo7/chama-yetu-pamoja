@@ -21,8 +21,6 @@ router = APIRouter(prefix="/api/tips", tags=["Tips"])
 class FlushTipSmsQueueRequest(BaseModel):
     tip_ids: Optional[List[int]] = None
 
-# Tier access mapping
-TIER_RANK = {"free": 0, "basic": 1, "standard": 2, "premium": 3}
 from app.models.subscription import SubscriptionTier
 
 
@@ -31,16 +29,11 @@ def user_has_access(user: Optional[User], tip: Tip, tier_dict: dict) -> bool:
         return True
     if not user:
         return False
-    if user.is_admin or user.subscription_tier == "premium":
+    if user.is_admin:
         return True
     if not user.is_subscription_active:
         return False
-
-    user_tier_conf = tier_dict.get(user.subscription_tier)
-    if user_tier_conf and isinstance(user_tier_conf.categories, list):
-        return getattr(tip, "category", "") in user_tier_conf.categories
-        
-    return False
+    return user.subscription_tier != "free"
 
 
 @router.get("", response_model=List)
@@ -54,7 +47,11 @@ async def list_tips(
 ):
     query = select(Tip)
 
-    if category:
+    if category == "free":
+        query = query.where(Tip.is_premium == 0)
+    elif category == "premium":
+        query = query.where(Tip.is_premium == 1)
+    elif category:
         query = query.where(Tip.category == category)
         
     if is_free is not None:
@@ -85,7 +82,7 @@ async def list_tips(
     response = []
 
     # Pre-calculate if the user is Premium/Admin to bypass the marketing filters
-    is_premium_or_admin = bool(user and (user.is_admin or TIER_RANK.get(user.subscription_tier, 0) == 3))
+    is_premium_or_admin = bool(user and (user.is_admin or user.subscription_tier != "free"))
     lost_counter = 0
 
     for tip in tips:
@@ -182,7 +179,7 @@ async def create_tip(body: TipCreate, background_tasks: BackgroundTasks, db: Asy
         bookmaker_odds=[bo.model_dump() for bo in body.bookmaker_odds] if body.bookmaker_odds else None,
         confidence=body.confidence,
         reasoning=body.reasoning,
-        category=body.category,
+        category="free" if getattr(body, "is_free", False) else "premium",
         is_premium=0 if getattr(body, "is_free", False) else 1,
     )
     db.add(tip)
@@ -192,8 +189,9 @@ async def create_tip(body: TipCreate, background_tasks: BackgroundTasks, db: Asy
     if body.notify:
         from app.routers.admin import broadcast_push, BroadcastPushRequest
         # Catchy notification draft
-        msg_title = f"🔥 New {body.category.upper()} Tip Posted!"
-        msg_body = f"We just dropped a new {body.category.upper()} prediction: {body.home_team} vs {body.away_team} in the {body.league}. Log in now to view it and smash the bookies!"
+        access_label = "free" if getattr(body, "is_free", False) else "premium"
+        msg_title = f"🔥 New {access_label.title()} Tip Posted!"
+        msg_body = f"We just dropped a new {access_label} prediction: {body.home_team} vs {body.away_team} in the {body.league}. Log in now to view it."
         
         req = BroadcastPushRequest(
             title=msg_title,
@@ -223,7 +221,11 @@ async def update_tip(tip_id: int, body: TipUpdate, db: AsyncSession = Depends(ge
 
     dumped_data = body.model_dump(exclude_unset=True)
     if "is_free" in dumped_data:
-        setattr(tip, "is_premium", 0 if dumped_data.pop("is_free") else 1)
+        is_free = dumped_data.pop("is_free")
+        setattr(tip, "is_premium", 0 if is_free else 1)
+        setattr(tip, "category", "free" if is_free else "premium")
+    elif "category" in dumped_data:
+        dumped_data["category"] = "free" if dumped_data["category"] == "free" else "premium"
 
     for field, value in dumped_data.items():
         setattr(tip, field, value)

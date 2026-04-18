@@ -322,7 +322,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     if (user.subscription.expiresAt && new Date(user.subscription.expiresAt) < new Date()) {
       return category === 'free';
     }
-    return hasAccessToCategory(user.subscription.tier, category);
+    if (user.is_admin) return true;
+    return category === 'free' || user.subscription.tier !== 'free';
   }, [user]);
 
   const toggleFavoriteTeam = useCallback((team: string) => {

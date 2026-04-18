@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Check, X, Star, Calendar, DollarSign } from 'lucide-react';
-import { getPricingTiers, updatePricingTier, addPricingTier, deletePricingTier, type TierConfig, CATEGORY_LABELS } from '../../services/pricingService';
-import type { TipCategory } from '../../services/tipsService';
+import { getPricingTiers, updatePricingTier, addPricingTier, deletePricingTier, type TierConfig } from '../../services/pricingService';
 import { toast } from 'sonner';
-
-const TIP_CATEGORIES: TipCategory[] = ['free', '2+', '4+', 'gg', '10+', 'vip'];
 
 const TIER_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   '5day': { bg: 'bg-blue-500/5', border: 'border-blue-500/20', text: 'text-blue-400' },
@@ -24,7 +21,7 @@ export function PricingManagePage() {
   const [newForm, setNewForm] = useState({
     tier_id: '', name: '', description: '',
     price: 200, durationDays: 5,
-    categories: ['free', '2+', '4+', 'gg', '10+', 'vip'] as TipCategory[],
+    categories: ['free', 'premium'] as string[],
     popular: false,
   });
 
@@ -68,7 +65,7 @@ export function PricingManagePage() {
     if (result) {
       loadTiers();
       setShowNewForm(false);
-      setNewForm({ tier_id: '', name: '', description: '', price: 200, durationDays: 5, categories: ['free', '2+', '4+', 'gg', '10+', 'vip'], popular: false });
+      setNewForm({ tier_id: '', name: '', description: '', price: 200, durationDays: 5, categories: ['free', 'premium'], popular: false });
       toast.success('New plan created');
     }
   };
@@ -122,28 +119,6 @@ export function PricingManagePage() {
               <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1 tracking-wider">Description</label>
               <input value={newForm.description} onChange={e => setNewForm({ ...newForm, description: e.target.value })} placeholder="e.g. 7 days of full access to all tips" className="admin-input" />
             </div>
-            <div className="sm:col-span-2">
-              <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 tracking-wider">Included Categories</label>
-              <div className="flex flex-wrap gap-2">
-                {TIP_CATEGORIES.map(cat => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => {
-                      const cats = newForm.categories.includes(cat)
-                        ? newForm.categories.filter(c => c !== cat)
-                        : [...newForm.categories, cat];
-                      setNewForm({ ...newForm, categories: cats });
-                    }}
-                    className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all ${
-                      newForm.categories.includes(cat) ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-zinc-500'
-                    }`}
-                  >
-                    {CATEGORY_LABELS[cat]?.label || cat}
-                  </button>
-                ))}
-              </div>
-            </div>
             <div className="flex items-center gap-3 py-2">
               <input type="checkbox" id="isPopularNew" checked={newForm.popular} onChange={e => setNewForm({ ...newForm, popular: e.target.checked })} className="w-4 h-4 accent-emerald-500" />
               <label htmlFor="isPopularNew" className="text-sm text-zinc-300">Highlight as "Popular"</label>
@@ -171,7 +146,7 @@ export function PricingManagePage() {
                     )}
                   </div>
                   <p className="text-[10px] text-zinc-500 mt-1">
-                    {tier.categories.filter(c => c !== 'free').map(c => CATEGORY_LABELS[c]?.label).join(', ')}
+                    Premium tips access
                   </p>
                 </div>
                 <div className="flex gap-1.5">

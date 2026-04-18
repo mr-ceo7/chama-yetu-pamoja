@@ -497,9 +497,9 @@ export function DashboardPage() {
         </div>
       </motion.div>
 
-      {/* ═══ Tip Performance + Jackpot Stats ═══ */}
-      <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-zinc-900/60 border border-zinc-800/60 rounded-2xl p-5">
+      {/* ═══ Tip Performance ═══ */}
+      <motion.div variants={item} className="grid grid-cols-1 gap-4">
+        <div className="bg-zinc-900/60 border border-zinc-800/60 rounded-2xl p-5">
           <h3 className="text-sm font-bold text-zinc-300 mb-4">Tip Performance Breakdown</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <StatBlock label="Total" value={stats.tips.total} color="#a1a1aa" />
@@ -524,19 +524,6 @@ export function DashboardPage() {
                     : `linear-gradient(90deg, ${RED}, ${PINK})`
                 }}
               />
-            </div>
-          </div>
-        </div>
-        <div className="bg-zinc-900/60 border border-zinc-800/60 rounded-2xl p-5">
-          <h3 className="text-sm font-bold text-zinc-300 mb-4">Jackpot Stats</h3>
-          <div className="space-y-4">
-            <div>
-              <p className="text-3xl font-bold text-gold-400 font-display">{stats.jackpots.total}</p>
-              <p className="text-xs text-zinc-500 mt-1">Total Jackpots Published</p>
-            </div>
-            <div className="border-t border-zinc-800 pt-4">
-              <p className="text-3xl font-bold text-emerald-400 font-display">{stats.jackpots.total_purchases}</p>
-              <p className="text-xs text-zinc-500 mt-1">Total Purchases</p>
             </div>
           </div>
         </div>

@@ -252,7 +252,6 @@ export function RevenuePage() {
             >
               <option value="">All Types</option>
               <option value="subscription">Subscription</option>
-              <option value="jackpot">Jackpot</option>
             </select>
           </div>
 

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import {
-  LayoutDashboard, Users, TrendingUp, Trophy, DollarSign, Settings,
+  LayoutDashboard, Users, TrendingUp, DollarSign, Settings,
   Bell, ChevronLeft, ChevronRight, LogOut, Shield, Menu, X, Megaphone, Presentation, Handshake
 } from 'lucide-react';
 import { useUser } from '../../context/UserContext';
@@ -12,7 +12,6 @@ const NAV_ITEMS = [
   { path: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { path: '/admin/users', icon: Users, label: 'Users', end: false },
   { path: '/admin/tips', icon: TrendingUp, label: 'Tips', end: false },
-  { path: '/admin/jackpots', icon: Trophy, label: 'Jackpots', end: false },
   { path: '/admin/revenue', icon: DollarSign, label: 'Revenue', end: false },
   { path: '/admin/pricing', icon: Settings, label: 'Pricing', end: false },
   { path: '/admin/ads', icon: Megaphone, label: 'Ads', end: false },

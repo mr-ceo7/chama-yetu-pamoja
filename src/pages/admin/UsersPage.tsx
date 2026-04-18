@@ -650,7 +650,6 @@ export function UsersPage() {
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
             >
               <option value="subscription">Subscription</option>
-              <option value="jackpot">Jackpot</option>
             </select>
           </div>
           {onboardAssignmentMode === 'subscription' ? (
@@ -826,7 +825,6 @@ export function UsersPage() {
               className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white"
             >
               <option value="subscription">Subscription</option>
-              <option value="jackpot">Jackpot</option>
             </select>
             {legacyBulkMode === 'subscription' ? (
               <>
@@ -974,7 +972,6 @@ export function UsersPage() {
                       className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white"
                     >
                       <option value="subscription">Subscription</option>
-                      <option value="jackpot">Jackpot</option>
                     </select>
                     {(legacyAssignMode[item.id] || 'subscription') === 'subscription' ? (
                       <>
@@ -1143,7 +1140,6 @@ export function UsersPage() {
             className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white"
           >
             <option value="grant_subscription">Grant Subscription</option>
-            <option value="grant_jackpot">Grant Jackpot</option>
             <option value="revoke_subscription">Revoke Subscription</option>
             <option value="ban">Ban Users</option>
             <option value="unban">Unban Users</option>
@@ -1325,7 +1321,7 @@ export function UsersPage() {
                       <div className="bg-zinc-800/30 rounded-xl p-4 my-2 border border-zinc-800/40">
                         {detailLoading ? (<div className="flex items-center justify-center py-8"><div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" /></div>) : userDetail ? (
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                            <div className="space-y-3"><h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Summary</h4><div className="space-y-2 text-xs"><p className="text-zinc-300">Total Time: <span className="font-bold text-white">{Math.floor(userDetail.total_time_spent / 60)}m {userDetail.total_time_spent % 60}s</span></p><p className="text-zinc-300">Total Spent: <span className="font-bold text-emerald-400">KES {userDetail.total_spent.toLocaleString()}</span></p><p className="text-zinc-300">Jackpot Purchases: <span className="font-bold">{userDetail.jackpot_purchases}</span></p><div className="text-zinc-300 flex items-center gap-1">Country: <span className="font-bold text-white">{userDetail.user.country ? <span className="inline-flex items-center gap-1"><span className="text-[13px] leading-none">{getFlagEmoji(userDetail.user.country)}</span>{userDetail.user.country}</span> : 'Unknown'}</span></div></div></div>
+                            <div className="space-y-3"><h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Summary</h4><div className="space-y-2 text-xs"><p className="text-zinc-300">Total Time: <span className="font-bold text-white">{Math.floor(userDetail.total_time_spent / 60)}m {userDetail.total_time_spent % 60}s</span></p><p className="text-zinc-300">Total Spent: <span className="font-bold text-emerald-400">KES {userDetail.total_spent.toLocaleString()}</span></p><div className="text-zinc-300 flex items-center gap-1">Country: <span className="font-bold text-white">{userDetail.user.country ? <span className="inline-flex items-center gap-1"><span className="text-[13px] leading-none">{getFlagEmoji(userDetail.user.country)}</span>{userDetail.user.country}</span> : 'Unknown'}</span></div></div></div>
                             <div className="space-y-3"><h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Page Activity</h4><div className="space-y-1.5 max-h-40 overflow-y-auto">{userDetail.pages.map(p => (<div key={p.path} className="flex items-center justify-between text-[11px]"><span className="text-zinc-400 truncate mr-2">{p.path}</span><span className="text-zinc-500 shrink-0">{p.visits}x &bull; {Math.floor(p.total_time / 60)}m</span></div>))}{userDetail.pages.length === 0 && <p className="text-xs text-zinc-600">No activity recorded</p>}</div></div>
                             <div className="space-y-3"><h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Payment History</h4><div className="space-y-1.5 max-h-40 overflow-y-auto">{userDetail.payments.map(p => (<div key={p.id} className="flex items-center justify-between text-[11px]"><div className="flex items-center gap-2"><span className={`w-1.5 h-1.5 rounded-full ${p.status === 'completed' ? 'bg-emerald-500' : p.status === 'failed' ? 'bg-red-500' : 'bg-yellow-500'}`} /><span className="text-zinc-300">KES {p.amount.toLocaleString()}</span></div><span className="text-zinc-500 capitalize">{p.method}</span></div>))}{userDetail.payments.length === 0 && <p className="text-xs text-zinc-600">No payments</p>}</div></div>
                           </div>
@@ -1395,7 +1391,6 @@ export function UsersPage() {
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <p className="text-zinc-400">Time: <span className="font-bold text-white">{Math.floor(userDetail.total_time_spent / 60)}m</span></p>
                           <p className="text-zinc-400">Spent: <span className="font-bold text-emerald-400">KES {userDetail.total_spent.toLocaleString()}</span></p>
-                          <p className="text-zinc-400">Jackpots: <span className="font-bold text-white">{userDetail.jackpot_purchases}</span></p>
                           <p className="text-zinc-400">Joined: <span className="font-bold text-white">{userDetail.user.created_at ? new Date(userDetail.user.created_at).toLocaleDateString() : '\u2014'}</span></p>
                         </div>
                         {userDetail.pages.length > 0 && (<div><h4 className="text-[10px] font-bold text-zinc-500 uppercase mb-1">Top Pages</h4>{userDetail.pages.slice(0, 3).map(p => (<div key={p.path} className="flex justify-between text-[11px]"><span className="text-zinc-400 truncate mr-2">{p.path}</span><span className="text-zinc-500 shrink-0">{p.visits}x</span></div>))}</div>)}

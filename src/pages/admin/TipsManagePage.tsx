@@ -17,8 +17,7 @@ import { AutocompleteInput } from '../../components/AutocompleteInput';
 
 const DEFAULT_PREDICTIONS = ['1', 'X', '2', '1X', 'X2', '12', 'Ov1.5', 'Ov2.5', 'Ov3.5', 'Un2.5', 'GG', 'NG', 'GG & O2.5'];
 
-const TIP_CATEGORIES: TipCategory[] = ['free', '2+', '4+', 'gg', '10+', 'vip'];
-const FREE_IN_PAID_CATEGORY_FILTERS = TIP_CATEGORIES.filter((cat) => cat !== 'free');
+const TIP_CATEGORIES: TipCategory[] = ['free', 'premium'];
 
 
 export function TipsManagePage() {
@@ -49,7 +48,7 @@ export function TipsManagePage() {
     prediction: '',
     confidence: 3,
     reasoning: '',
-    category: (sessionStorage.getItem('admin_last_category') as TipCategory) || '2+',
+    category: (sessionStorage.getItem('admin_last_category') as TipCategory) || 'premium',
     isFree: sessionStorage.getItem('admin_last_is_free') === 'true',
     notify: false,
     notify_target: 'subscribers',
@@ -71,7 +70,7 @@ export function TipsManagePage() {
       fixtureId: '', homeTeam: '', awayTeam: '', league: '',
       matchDate: new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 16),
       prediction: '', confidence: 3, reasoning: '', 
-      category: (sessionStorage.getItem('admin_last_category') as TipCategory) || '2+',
+      category: (sessionStorage.getItem('admin_last_category') as TipCategory) || 'premium',
       isFree: sessionStorage.getItem('admin_last_is_free') === 'true',
       notify: false, notify_target: 'subscribers', notify_channel: 'both',
     });
@@ -134,7 +133,7 @@ export function TipsManagePage() {
       bookmakerOdds: [], // Deprecated
       confidence: form.confidence,
       reasoning: form.reasoning,
-      category: form.category,
+      category: (form.isFree ? 'free' : 'premium') as TipCategory,
       isFree: form.isFree,
       notify: form.notify,
       notify_target: form.notify_target,
@@ -178,7 +177,7 @@ export function TipsManagePage() {
       prediction: tip.prediction,
       confidence: tip.confidence,
       reasoning: tip.reasoning,
-      category: tip.category,
+      category: (tip.isFree ? 'free' : 'premium') as TipCategory,
       isFree: tip.isFree || false,
       notify: false, notify_target: 'subscribers', notify_channel: 'both',
     });
@@ -196,7 +195,7 @@ export function TipsManagePage() {
       prediction: tip.prediction,
       confidence: tip.confidence,
       reasoning: tip.reasoning,
-      category: tip.category,
+      category: (tip.isFree ? 'free' : 'premium') as TipCategory,
       isFree: tip.isFree || false,
       notify: false, notify_target: 'subscribers', notify_channel: 'both',
     });
@@ -253,10 +252,8 @@ export function TipsManagePage() {
 
   // Filtered tips
   const filteredTips = tips.filter(t => {
-    if (filterCategory.startsWith('free:')) {
-      const freeCategory = filterCategory.slice(5);
-      if (!(t.isFree && t.category === freeCategory)) return false;
-    } else if (filterCategory !== 'all' && t.category !== filterCategory) {
+    const normalizedCategory = t.isFree ? 'free' : 'premium';
+    if (filterCategory !== 'all' && normalizedCategory !== filterCategory) {
       return false;
     }
     if (filterResult !== 'all' && t.result !== filterResult) return false;
@@ -395,12 +392,10 @@ export function TipsManagePage() {
                   </div>
                 )}
 
-                <FormField label="Category" required>
-                  <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value as TipCategory })} className="admin-input py-2 min-h-[40px] text-sm">
-                    {TIP_CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{CATEGORY_LABELS[cat]?.label || cat}</option>
-                    ))}
-                  </select>
+                <FormField label="Access Level">
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-400">
+                    {form.isFree ? 'Free tip' : 'Premium tip'}
+                  </div>
                 </FormField>
 
                 <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 p-2.5 rounded-lg mt-1 mb-1">
@@ -538,18 +533,7 @@ export function TipsManagePage() {
               className={`px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all ${
                 filterCategory === cat ? 'bg-emerald-500 text-zinc-950' : 'text-zinc-500 hover:text-zinc-300'
               }`}
-            >{CATEGORY_LABELS[cat]?.label || cat}</button>
-          ))}
-        </div>
-        <div className="flex gap-1 bg-zinc-900/60 border border-zinc-800/60 rounded-xl p-1 overflow-x-auto shrink-0">
-          {FREE_IN_PAID_CATEGORY_FILTERS.map(cat => (
-            <button
-              key={`free:${cat}`}
-              onClick={() => setFilterCategory(`free:${cat}`)}
-              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all ${
-                filterCategory === `free:${cat}` ? 'bg-emerald-500 text-zinc-950' : 'text-zinc-500 hover:text-zinc-300'
-              }`}
-            >{`Free ${CATEGORY_LABELS[cat]?.label || cat}`}</button>
+            >{cat === 'free' ? 'Free Tips' : 'Premium Tips'}</button>
           ))}
         </div>
         <div className="flex gap-1 bg-zinc-900/60 border border-zinc-800/60 rounded-xl p-1">
@@ -615,10 +599,8 @@ export function TipsManagePage() {
                   <LeagueLogo leagueName={tip.league} size={14} />
                   <span className="text-[11px] text-zinc-500">{tip.league}</span>
                   <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${
-                    tip.category === 'free' ? 'bg-emerald-500/20 text-emerald-400' :
-                    tip.category === 'vip' ? 'bg-yellow-500/20 text-yellow-400' :
-                    'bg-blue-500/20 text-blue-400'
-                  }`}>{CATEGORY_LABELS[tip.category]?.label || tip.category}</span>
+                    tip.isFree ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                  }`}>{tip.isFree ? 'Free Tips' : 'Premium Tips'}</span>
                   <span className="text-[10px] text-zinc-600">
                     {tip.matchDate.includes('T') ? tip.matchDate.replace('T', ' ').substring(0, 16) : tip.matchDate}
                   </span>

@@ -1,522 +1,403 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Zap, Lock, Star, Trophy, Crown, ChevronRight, Target, Plus, Check, Eye, AlertTriangle, X, Gift, Clock, Flame, Shield, Diamond, Gem } from 'lucide-react';
-import { TeamWithLogo, LeagueLogo } from '../components/TeamLogo';
-import { getFreeTips, getPremiumTips, getTipsByCategory, getTipStats, getAllJackpots, getJackpotBundleInfo, type Tip, type TipCategory, type JackpotPrediction, type JackpotBundleInfo } from '../services/tipsService';
-import { CATEGORY_LABELS, getPricingTiers, type TierConfig } from '../services/pricingService';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  Crown,
+  Gift,
+  Lock,
+  Shield,
+  Star,
+  TrendingUp,
+  X,
+  Zap,
+} from 'lucide-react';
+import { format, isToday, isTomorrow, isYesterday } from 'date-fns';
+import { LeagueLogo, TeamWithLogo } from '../components/TeamLogo';
 import { SEO } from '../components/SEO';
 import { useUser } from '../context/UserContext';
-// Detached: import { useBetSlip } from '../context/BetSlipContext';
-import { format, parseISO, isToday, isTomorrow, isYesterday } from 'date-fns';
+import { getFreeTips, getPremiumTips, type Tip } from '../services/tipsService';
+import { getPricingTiers, type TierConfig } from '../services/pricingService';
 
-// ─── Category order for display ──────────────────────────────
-const CATEGORY_ORDER: TipCategory[] = ['2+', '4+', 'gg', '10+', 'vip'];
-const CATEGORY_ICONS: Record<TipCategory, React.ElementType> = {
-  'free': Gift,
-  '2+': Flame,
-  '4+': Diamond,
-  'gg': Shield,
-  '10+': Gem,
-  'vip': Crown,
+type TipsTab = 'free' | 'premium' | 'archive';
+
+const PLAN_ICONS: Record<string, React.ElementType> = {
+  '5day': Zap,
+  '10day': Star,
+  '30day': Crown,
 };
 
-// ─── Tip Card ────────────────────────────────────────────────
-function TipCard({ tip, locked = false, onGetFree }: { tip: Tip; locked?: boolean; key?: React.Key; onGetFree?: () => void }) {
-  const { user, setShowAuthModal, setShowPricingModal, hasAccess } = useUser();
-  // Detached: const { addSelection, selections } = useBetSlip();
-  const [addedBookmaker, setAddedBookmaker] = useState<string | null>(null);
+function getDateLabel(matchDate: string): string {
+  const date = new Date(matchDate);
+  if (isToday(date)) return 'Today';
+  if (isTomorrow(date)) return 'Tomorrow';
+  if (isYesterday(date)) return 'Yesterday';
+  return format(date, 'MMM d, yyyy');
+}
 
-  // Detached: const isInSlip = selections.some(s => s.fixtureId === tip.fixtureId);
+function groupTipsByDate(tips: Tip[]) {
+  const grouped = new Map<string, Tip[]>();
+  for (const tip of tips) {
+    const label = getDateLabel(tip.matchDate);
+    const bucket = grouped.get(label) || [];
+    bucket.push(tip);
+    grouped.set(label, bucket);
+  }
+  return Array.from(grouped.entries());
+}
 
-  const handleUnlock = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!user) setShowAuthModal(true);
-    else setShowPricingModal(true, tip.category);
-  };
+export function buildVipArchiveTips(tips: Tip[], premiumUnlocked: boolean): Tip[] {
+  const settledTips = tips.filter((tip) => tip.result !== 'pending');
+  if (premiumUnlocked) {
+    return settledTips;
+  }
 
-  /* Detached: handleAddToSlip and bestOdds logic */
+  const wins = settledTips.filter((tip) => tip.result === 'won');
+  const losses = settledTips.filter((tip) => tip.result === 'lost');
+  const others = settledTips.filter((tip) => tip.result !== 'won' && tip.result !== 'lost');
+  const allowedLosses = Math.min(losses.length, Math.max(0, Math.floor(wins.length * 0.4)));
+
+  return [...wins, ...losses.slice(0, allowedLosses), ...others].sort(
+    (a, b) => new Date(b.matchDate).getTime() - new Date(a.matchDate).getTime()
+  );
+}
+
+function resultBadge(result: Tip['result']) {
+  if (result === 'won') return 'text-emerald-400 bg-emerald-500/10';
+  if (result === 'lost') return 'text-red-400 bg-red-500/10';
+  if (result === 'void') return 'text-zinc-400 bg-zinc-800';
+  if (result === 'postponed') return 'text-orange-400 bg-orange-500/10';
+  return 'text-zinc-600 bg-transparent';
+}
+
+function TipTable({
+  title,
+  subtitle,
+  tips,
+  locked,
+  onUnlock,
+}: {
+  title: string;
+  subtitle: string;
+  tips: Tip[];
+  locked?: boolean;
+  onUnlock?: () => void;
+}) {
+  const groupedTips = useMemo(() => groupTipsByDate(tips), [tips]);
 
   return (
-    <div className={`rounded-sm border-2 p-6 transition-transform duration-300 hover:-translate-y-1 ${
-      locked 
-        ? 'bg-zinc-950 border-zinc-800 shadow-[4px_4px_0_rgb(39,39,42)]' 
-        : 'bg-zinc-950 border-amber-500/50 hover:border-amber-400 shadow-[4px_4px_0_rgba(245,158,11,0.5)] hover:shadow-[6px_6px_0_rgba(245,158,11,0.8)]'
-    }`}>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-1.5">
-          <LeagueLogo leagueName={tip.league} size={20} />
-          <span className="text-xs text-zinc-500 uppercase tracking-wider">{tip.league}</span>
+    <div className="bg-zinc-950/90 border-2 border-zinc-800 rounded-sm overflow-hidden shadow-[4px_4px_0_rgb(39,39,42)]">
+      <div className="p-5 border-b border-zinc-800 bg-zinc-900/70">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-black text-white uppercase tracking-wide">{title}</h3>
+            <p className="mt-1 text-xs text-zinc-400">{subtitle}</p>
+          </div>
+          {locked && onUnlock ? (
+            <button
+              onClick={onUnlock}
+              className="inline-flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs font-bold uppercase tracking-wider text-amber-400 hover:bg-amber-500/20"
+            >
+              <Lock className="w-4 h-4" />
+              Unlock
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-bold uppercase tracking-wider text-emerald-400">
+              <CheckCircle2 className="w-4 h-4" />
+              {locked ? 'Locked' : 'Open'}
+            </span>
+          )}
         </div>
-        <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full flex items-center gap-1 ${
-          tip.isFree ? 'bg-blue-600/20 text-blue-400' :
-          tip.category?.toLowerCase() === 'vip' ? 'bg-gold-500/20 text-gold-400' :
-          'bg-blue-500/20 text-blue-400'
-        }`}>
-          {CATEGORY_LABELS[tip.category]?.label || tip.category}
-        </span>
       </div>
 
-      {locked && tip.category?.toLowerCase() === 'gg' ? (
-        <div className="block mb-4 group">
-          <div className="flex items-center gap-2 text-lg font-black text-zinc-500/60 italic tracking-wide">
-            <Lock className="w-5 h-5 text-gold-500/40" />
-            <span>PREMIUM FIXTURE</span>
-          </div>
-          <p className="text-[11px] text-zinc-500 font-bold uppercase tracking-widest mt-1"><Clock className="w-3 h-3 inline mr-1 mb-0.5" />{new Date(tip.matchDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-        </div>
+      {tips.length === 0 ? (
+        <div className="p-10 text-center text-sm text-zinc-500">No tips available right now.</div>
       ) : (
-        <Link to={`/match/${tip.fixtureId}`} className="block mb-4 group/match">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-3">
-              <TeamWithLogo teamName={tip.homeTeam} size={28} textClassName="font-black text-lg text-white group-hover/match:text-blue-300 transition-colors" />
-            </div>
-            <div className="flex items-center gap-2 pl-2 border-l-2 border-zinc-800 ml-3">
-               <span className="text-xs font-black text-zinc-600 uppercase tracking-widest px-2 py-0.5 bg-zinc-900 rounded-md">VS</span>
-               <p className="text-xs text-blue-400 font-bold bg-blue-500/10 px-2 py-0.5 rounded-md"><Clock className="w-3 h-3 inline mr-1 mb-0.5" />{new Date(tip.matchDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <TeamWithLogo teamName={tip.awayTeam} size={28} textClassName="font-black text-lg text-zinc-300 group-hover/match:text-blue-300 transition-colors" />
-            </div>
-          </div>
-        </Link>
-      )}
-      <div className="relative group/tip">
-        {locked ? (
-          <div className="relative">
-            {/* Blurred Prediction Preview — Completely secure, data is not even sent from the backend */}
-            <div className="bg-zinc-950/50 border border-zinc-800 rounded-xl p-4 mb-3 blur-sm select-none pointer-events-none">
-              <div className="flex items-center justify-between mb-2">
-                {/* We render a randomized placeholder to ensure character count leakage is impossible */}
-                <span className="text-sm font-bold text-zinc-700 tracking-widest">
-                  {tip.prediction.split('').map(() => '•').join('')}
-                </span>
-              </div>
-              <div className="flex items-center gap-1 opacity-20">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="w-3 h-3 text-zinc-700" />
+        <div className="overflow-hidden">
+          <div className="max-h-[36rem] overflow-auto scrollbar-thin scrollbar-thumb-zinc-800">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 z-10 bg-zinc-900">
+                <tr className="border-b border-zinc-800">
+                  <th className="w-8 px-3 py-2 text-left font-bold uppercase tracking-wider text-zinc-500">#</th>
+                  <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-zinc-500">Match</th>
+                  <th className="w-28 px-3 py-2 text-center font-bold uppercase tracking-wider text-blue-400">Tip</th>
+                  <th className="w-20 px-3 py-2 text-center font-bold uppercase tracking-wider text-zinc-500">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupedTips.map(([label, items]) => (
+                  <React.Fragment key={label}>
+                    <tr className="border-b border-zinc-800 bg-zinc-800/30">
+                      <td colSpan={4} className="px-3 py-1 text-center text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                        {label}
+                      </td>
+                    </tr>
+                    {items.map((tip, index) => {
+                      const isLocked = locked && tip.result === 'pending';
+                      return (
+                        <tr
+                          key={tip.id}
+                          className={`border-b border-zinc-800/50 last:border-0 ${
+                            tip.result === 'won'
+                              ? 'bg-emerald-500/5'
+                              : tip.result === 'lost'
+                                ? 'bg-red-500/5'
+                                : tip.result === 'postponed'
+                                  ? 'bg-orange-500/5'
+                                  : ''
+                          }`}
+                        >
+                          <td className="px-3 py-2 text-zinc-500">{index + 1}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                                <LeagueLogo leagueName={tip.league} size={12} />
+                                <span>{tip.league}</span>
+                                <span className="opacity-50">•</span>
+                                <Clock className="w-2.5 h-2.5" />
+                                {new Date(tip.matchDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              <Link to={`/match/${tip.fixtureId}`} className="inline-flex items-center gap-1 text-zinc-300 transition-colors hover:text-blue-400">
+                                <TeamWithLogo teamName={tip.homeTeam} size={14} textClassName="text-xs" />
+                                <span className="mx-0.5 text-zinc-600">vs</span>
+                                <TeamWithLogo teamName={tip.awayTeam} size={14} textClassName="text-xs" />
+                              </Link>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {isLocked ? (
+                              <div className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-zinc-600">
+                                <Lock className="w-3 h-3" />
+                                Locked
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="text-sm font-bold text-blue-400">{tip.prediction}</span>
+                                <div className="flex items-center gap-0.5">
+                                  {Array.from({ length: 5 }).map((_, starIndex) => (
+                                    <Star
+                                      key={starIndex}
+                                      className={`w-2.5 h-2.5 ${
+                                        starIndex < tip.confidence ? 'fill-amber-400 text-amber-400' : 'text-zinc-700'
+                                      }`}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${resultBadge(tip.result)}`}>
+                              {tip.result === 'pending' ? '—' : tip.result}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
                 ))}
-              </div>
-            </div>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
-            {/* Action Buttons Overlay */}
-            <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/40 rounded-xl border border-zinc-800/50 gap-2 px-3">
-              <button 
-                onClick={handleUnlock}
-                className="flex-1 flex flex-col items-center justify-center py-2.5 rounded-lg bg-gold-500/10 hover:bg-gold-500/20 border border-gold-500/20 transition-all group/eye"
+function PremiumPlansPreview({
+  paidTiers,
+  pendingPremium,
+  premiumUnlocked,
+  onUnlock,
+}: {
+  paidTiers: TierConfig[];
+  pendingPremium: number;
+  premiumUnlocked: boolean;
+  onUnlock: () => void;
+}) {
+  return (
+    <div className="mb-8 rounded-sm border-2 border-zinc-800 bg-zinc-950/90 shadow-[4px_4px_0_rgb(39,39,42)] overflow-hidden">
+      <div className="border-b border-zinc-800 bg-zinc-900/70 p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-amber-400">Premium Plans Board</p>
+            <h2 className="mt-2 text-xl font-black uppercase tracking-wide text-white">Unlock the full premium board</h2>
+            <p className="mt-2 max-w-2xl text-sm text-zinc-300">
+              {premiumUnlocked
+                ? 'Your account can already access the premium board. Plans remain visible here for reference.'
+                : 'One premium subscription unlocks every paid pick on the board. No extra category switches.'}
+            </p>
+          </div>
+          <button
+            onClick={onUnlock}
+            className="inline-flex items-center justify-center gap-2 rounded-sm border-2 border-amber-600 bg-amber-500 px-4 py-3 text-sm font-black uppercase tracking-widest text-zinc-950 shadow-[4px_4px_0_rgb(217,119,6)] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(217,119,6)]"
+          >
+            <TrendingUp className="w-4 h-4" />
+            {premiumUnlocked ? 'Open Plans' : 'View Plans'}
+          </button>
+        </div>
+      </div>
+
+      <div className="p-2 sm:p-5 border-b border-zinc-800">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-4">
+          {paidTiers.map((tier) => {
+            const Icon = PLAN_ICONS[tier.id] || Crown;
+            return (
+              <div
+                key={tier.id}
+                className={`relative rounded-sm border sm:border-2 p-2 sm:p-4 flex flex-col items-center text-center sm:items-start sm:text-left shadow-[2px_2px_0_rgb(39,39,42)] sm:shadow-[4px_4px_0_rgb(39,39,42)] ${
+                  tier.popular
+                    ? 'border-amber-500/50 bg-amber-500/10'
+                    : 'border-zinc-800 bg-zinc-900/70'
+                }`}
               >
-                <div className="p-1.5 rounded-full bg-gold-500/20 text-gold-400 group-hover/eye:scale-110 transition-all mb-1">
-                  <Eye className="w-4 h-4" />
+                {tier.popular && (
+                  <span className="absolute -top-1.5 right-1 sm:right-3 sm:top-3 rounded-sm bg-amber-500 px-1 py-0.5 sm:px-2 sm:py-1 text-[7px] sm:text-[9px] font-black uppercase tracking-tight sm:tracking-widest text-zinc-950 shadow-md">
+                    🔥 Best
+                  </span>
+                )}
+                <div className="mb-2 sm:mb-4 inline-flex rounded-md sm:rounded-sm bg-zinc-950 p-1.5 sm:p-2 text-amber-400 shadow-inner">
+                  <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
-                <p className="text-[9px] text-gold-400 font-bold uppercase tracking-wider">
-                  Unlock
-                </p>
-              </button>
-              {onGetFree && (
-                <button 
-                  onClick={(e) => { e.preventDefault(); onGetFree(); }}
-                  className="flex-1 flex flex-col items-center justify-center py-2.5 rounded-lg bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 transition-all group/free"
-                >
-                  <div className="p-1.5 rounded-full bg-blue-600/20 text-blue-400 group-hover/free:scale-110 transition-all mb-1">
-                    <Gift className="w-4 h-4" />
-                  </div>
-                  <p className="text-[9px] text-blue-400 font-bold uppercase tracking-wider">
-                    Get Free
+                <p className="text-[10px] sm:text-lg font-black uppercase tracking-tighter sm:tracking-wide text-white leading-tight drop-shadow-sm line-clamp-2">{tier.name}</p>
+                <p className="mt-2 hidden sm:block min-h-[40px] text-xs text-zinc-400 leading-relaxed">{tier.description}</p>
+                <div className="mt-auto w-full pt-2 sm:mt-5 sm:border-t sm:border-zinc-800 sm:pt-4">
+                  <p className="text-sm sm:text-2xl font-black text-amber-400 whitespace-nowrap">
+                    <span className="text-[9px] sm:text-sm text-amber-500/70 mr-0.5">{tier.currency_symbol || 'KES'}</span>
+                    {tier.price.toLocaleString()}
                   </p>
-                </button>
-              )}
-            </div>
+                  <p className="mt-0.5 sm:mt-1 text-[8px] sm:text-[11px] font-bold uppercase tracking-widest text-zinc-500 whitespace-nowrap">
+                    {tier.durationDays} days
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bg-zinc-950 px-5 py-4">
+        <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+          Choose any plan to unlock the same premium board. Longer plans only extend your access window.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function VipArchivesBoard({
+  tips,
+  premiumUnlocked,
+  onUnlock,
+}: {
+  tips: Tip[];
+  premiumUnlocked: boolean;
+  onUnlock: () => void;
+}) {
+  const archiveTips = useMemo(() => buildVipArchiveTips(tips, premiumUnlocked), [tips, premiumUnlocked]);
+
+  return (
+    <div className="mb-8 rounded-sm border-2 border-zinc-800 bg-zinc-950/90 shadow-[4px_4px_0_rgb(39,39,42)] overflow-hidden">
+      <div className="border-b border-zinc-800 bg-zinc-900/70 p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">VIP Archives</p>
+            <h2 className="mt-2 text-xl font-black uppercase tracking-wide text-white">Premium results archive</h2>
+            <p className="mt-2 max-w-2xl text-sm text-zinc-300">
+              {premiumUnlocked
+                ? 'Full settled premium history for members.'
+                : 'Preview of recent premium performance. Full archive unlocks with a premium plan.'}
+            </p>
+          </div>
+          {!premiumUnlocked && (
+            <button
+              onClick={onUnlock}
+              className="inline-flex items-center justify-center gap-2 rounded-sm border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm font-black uppercase tracking-widest text-blue-300 hover:bg-blue-500/15"
+            >
+              <Lock className="w-4 h-4" />
+              Unlock Full Archive
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="p-5">
+        {archiveTips.length === 0 ? (
+          <div className="rounded-sm border border-zinc-800 bg-zinc-900/50 px-4 py-8 text-center text-sm text-zinc-500">
+            No settled premium results available yet.
           </div>
         ) : (
-          <>
-            {/* Prediction & confidence */}
-            <div className="bg-amber-500/10 border-2 border-amber-500/20 rounded-sm p-4 mb-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-base font-black text-amber-500 uppercase tracking-wide">{tip.prediction}</span>
-              </div>
-              <div className="flex items-center gap-1 bg-black/40 w-fit px-2 py-1 rounded-sm border border-white/5">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className={`w-3.5 h-3.5 ${i < tip.confidence ? 'text-amber-500 fill-amber-500' : 'text-zinc-800'}`} />
-                ))}
-              </div>
+          <div className="overflow-hidden rounded-sm border border-zinc-800">
+            <div className="max-h-[28rem] overflow-auto scrollbar-thin scrollbar-thumb-zinc-800">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 z-10 bg-zinc-900">
+                  <tr className="border-b border-zinc-800">
+                    <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-zinc-500">Match</th>
+                    <th className="w-28 px-3 py-2 text-center font-bold uppercase tracking-wider text-blue-400">Tip</th>
+                    <th className="w-24 px-3 py-2 text-center font-bold uppercase tracking-wider text-zinc-500">Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {archiveTips.map((tip) => (
+                    <tr key={`archive-${tip.id}`} className="border-b border-zinc-800/50 last:border-0">
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                            <LeagueLogo leagueName={tip.league} size={12} />
+                            <span>{tip.league}</span>
+                            <span className="opacity-50">•</span>
+                            {getDateLabel(tip.matchDate)}
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-zinc-300">
+                            <TeamWithLogo teamName={tip.homeTeam} size={14} textClassName="text-xs" />
+                            <span className="mx-0.5 text-zinc-600">vs</span>
+                            <TeamWithLogo teamName={tip.awayTeam} size={14} textClassName="text-xs" />
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <span className="text-sm font-bold text-blue-400">{tip.prediction}</span>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${resultBadge(tip.result)}`}>
+                          {tip.result}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-
-            {/* Detached: Multi-bookmaker odds block */}
-
-            {tip.reasoning && (
-              <p className="text-xs text-zinc-400 leading-relaxed">{tip.reasoning}</p>
-            )}
-            {tip.result !== 'pending' && (
-              <div className={`mt-3 px-4 py-2 text-center uppercase font-bold tracking-widest border-2 rounded-sm ${
-                tip.result === 'won' ? 'bg-amber-500 text-black border-amber-600 text-lg shadow-[2px_2px_0_rgb(217,119,6)]' :
-                tip.result === 'lost' ? 'bg-zinc-900 text-zinc-500 border-zinc-800 text-xs' :
-                'bg-zinc-800 text-zinc-400 border-zinc-700 text-xs'
-              }`}>
-                {tip.result === 'won' ? 'WINNER' : tip.result}
-              </div>
-            )}
-          </>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-// ─── Jackpot Card ────────────────────────────────────────────
-function JackpotCard({ jackpot, onGetFree }: { jackpot: JackpotPrediction; key?: React.Key; onGetFree?: () => void }) {
-  const { user, setShowAuthModal, setSelectedJackpot, setShowJackpotModal } = useUser();
-  const isUnlocked = !jackpot.locked;
-  const variationCount = jackpot.variations?.length || jackpot.variation_count || 0;
-  const settledWins = jackpot.matches?.filter((match) => match.result === 'won').length || 0;
-  const settledLosses = jackpot.matches?.filter((match) => match.result === 'lost').length || 0;
-  const showWinLossStats = settledWins > 0 || settledLosses > 0;
-  const formattedDisplayDate = jackpot.displayDate
-    ? new Date(`${jackpot.displayDate}T00:00:00`).toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      })
-    : null;
-
-  const handlePurchase = () => {
-    if (!user) {
-      setShowAuthModal(true);
-    } else {
-      setSelectedJackpot(jackpot);
-      setShowJackpotModal(true);
-    }
-  };
-
-  const resultBadge = jackpot.result && jackpot.result !== 'pending' ? jackpot.result : null;
-  const promoTitle = jackpot.promoTitle || `${jackpot.type === 'midweek' ? 'Midweek' : 'Mega'} Jackpot`;
-  const promoOnly = !!jackpot.promoOnly;
-
-  return (
-    <div className="space-y-3">
-      {jackpot.promoImageUrl && (
-        <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/70">
-          <img
-            src={jackpot.promoImageUrl}
-            alt={promoTitle}
-            className="w-full object-cover"
-            loading="lazy"
-          />
-          {(jackpot.promoTitle || jackpot.promoCaption) && (
-            <div className="border-t border-zinc-800 bg-zinc-950/90 px-4 py-3">
-              {jackpot.promoTitle && (
-                <p className="text-sm font-bold text-white">{jackpot.promoTitle}</p>
-              )}
-              {jackpot.promoCaption && (
-                <p className="mt-1 text-xs leading-relaxed text-zinc-400">{jackpot.promoCaption}</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {promoOnly ? (
-        <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 px-4 py-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-sky-400">Promo Only</p>
-          <p className="mt-1 text-sm text-zinc-300">
-            Prediction drops soon{formattedDisplayDate ? <> for <span className="font-semibold text-white">{formattedDisplayDate}</span></> : null}.
-          </p>
-        </div>
-      ) : (
-        <div className={`bg-zinc-950/90 border-2 rounded-sm overflow-hidden transition-transform duration-300 hover:scale-[1.01] shadow-[6px_6px_0_rgb(39,39,42)] group ${
-          resultBadge === 'won' ? 'border-amber-500' :
-          resultBadge === 'lost' ? 'border-zinc-800' :
-          resultBadge === 'bonus' ? 'border-amber-500' :
-          resultBadge === 'postponed' ? 'border-zinc-800' :
-          'border-zinc-800 hover:border-zinc-700'
-        }`}>
-          <div className="p-6 pb-4">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl ${
-                  resultBadge === 'won' ? 'bg-blue-600/20' :
-                  resultBadge === 'lost' ? 'bg-red-500/20' :
-                  'bg-gold-500/20'
-                }`}>
-                  <Trophy className={`w-6 h-6 ${
-                    resultBadge === 'won' ? 'text-blue-400' :
-                    resultBadge === 'lost' ? 'text-red-400' :
-                    'text-gold-400'
-                  }`} />
-                </div>
-                <div>
-                  <h4 className="text-base font-bold text-white uppercase tracking-wide">
-                    {jackpot.type === 'midweek' ? 'Midweek Jackpot' : 'Mega Jackpot'}
-                  </h4>
-                  <p className="text-xs text-zinc-400 font-medium">
-                    {jackpot.type === 'midweek' ? '13 Matches' : '17 Matches'} • <span className="text-gold-400 font-bold">{jackpot.dcLevel === 99 ? 'ALL ' : jackpot.dcLevel}DC</span> • {variationCount} Unique Version{variationCount !== 1 ? 's' : ''}
-                    {formattedDisplayDate && <> • {formattedDisplayDate}</>}
-                    {showWinLossStats && (
-                      <>
-                        {' '}• <span className="text-blue-400 font-bold">{settledWins}W</span>/<span className="text-red-400 font-bold">{settledLosses}L</span>
-                      </>
-                    )}
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                {resultBadge && (
-                  <span className={`block text-[10px] font-black uppercase tracking-wider mb-1 px-2.5 py-0.5 rounded-full ${
-                    resultBadge === 'won' ? 'bg-blue-600/20 text-blue-400' :
-                    resultBadge === 'lost' ? 'bg-red-500/20 text-red-400' :
-                    resultBadge === 'bonus' ? 'bg-yellow-500/20 text-yellow-400' :
-                    resultBadge === 'postponed' ? 'bg-orange-500/20 text-orange-400' :
-                    'bg-zinc-800 text-zinc-400'
-                  }`}>{resultBadge}</span>
-                )}
-                <span className="text-lg font-bold text-gold-400">{jackpot.price === 0 ? <span className="text-blue-400">FREE</span> : `${jackpot.currency_symbol || 'KES'} ${jackpot.price.toLocaleString(undefined, { minimumFractionDigits: jackpot.price % 1 !== 0 ? 2 : 0 })}`}</span>
-              </div>
-            </div>
-
-            {jackpot.price === 0 ? (
-              <p className="text-sm text-zinc-400 mb-4">
-                FREE prediction with <span className="text-gold-400 font-semibold">ALL</span> Double Chances to guide you{formattedDisplayDate ? <> for date <span className="text-white font-semibold">{formattedDisplayDate}</span></> : null}
-              </p>
-            ) : (
-              <p className="text-sm text-zinc-400 mb-4">
-                <span className="text-white font-semibold">{variationCount}</span> unique version{variationCount !== 1 ? 's' : ''} with <span className="text-gold-400 font-semibold">{jackpot.dcLevel === 99 ? 'ALL' : jackpot.dcLevel}</span> Double Chances{formattedDisplayDate ? <> for date <span className="text-white font-semibold">{formattedDisplayDate}</span></> : null}
-              </p>
-            )}
-
-            {isUnlocked && jackpot.variations && jackpot.variations.length > 0 ? (
-              <div className="bg-black/40 border-t border-zinc-800 rounded-3xl overflow-hidden mb-4 mx-2">
-                <div className="max-h-72 overflow-auto scrollbar-thin scrollbar-thumb-zinc-800">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-zinc-900 z-10">
-                      <tr className="border-b border-zinc-800">
-                        <th className="px-2.5 py-2 text-left text-zinc-500 font-bold uppercase tracking-wider w-7">#</th>
-                        <th className="px-2.5 py-2 text-left text-zinc-500 font-bold uppercase tracking-wider">Match</th>
-                        {jackpot.variations.map((_, vi) => (
-                          <th key={vi} className="px-2 py-2 text-center text-gold-400 font-bold uppercase tracking-wider w-12">V{vi + 1}</th>
-                        ))}
-                        <th className="px-2 py-2 text-center text-zinc-500 font-bold uppercase tracking-wider w-16">Result</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(() => {
-                        const labelsOrder: string[] = [];
-                        const groupedMatches = jackpot.matches.reduce((acc, m, idx) => {
-                          let dateLabel = 'TBA';
-                          if (m.matchDate) {
-                            try {
-                              const dateObj = new Date(m.matchDate);
-                              if (!isNaN(dateObj.getTime())) {
-                                dateLabel = format(dateObj, 'MMM d, yyyy');
-                                if (isToday(dateObj)) dateLabel = 'Today';
-                                else if (isTomorrow(dateObj)) dateLabel = 'Tomorrow';
-                                else if (isYesterday(dateObj)) dateLabel = 'Yesterday';
-                              }
-                            } catch {}
-                          }
-
-                          if (!acc[dateLabel]) {
-                            acc[dateLabel] = [];
-                            labelsOrder.push(dateLabel);
-                          }
-                          acc[dateLabel].push({ ...m, _idx: idx });
-                          return acc;
-                        }, {} as Record<string, any[]>);
-
-                        let displayIdx = 0;
-                        return labelsOrder.map((dateLabel) => {
-                          const group = groupedMatches[dateLabel];
-                          return (
-                            <React.Fragment key={dateLabel}>
-                              <tr className="bg-zinc-800/40 border-b border-zinc-800">
-                                <td colSpan={3 + (jackpot.variations?.length || 0)} className="px-2.5 py-1 w-full text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">
-                                  —— {dateLabel} ——
-                                </td>
-                              </tr>
-                              {group.map((m) => {
-                                const originalIdx = m._idx;
-                                const idx = displayIdx++;
-                                return (
-                                  <tr key={originalIdx} className={`border-b border-zinc-800/50 last:border-0 ${
-                                    m.result === 'won' ? 'bg-blue-500/5' : m.result === 'lost' ? 'bg-red-500/5' : m.result === 'postponed' ? 'bg-orange-500/5' : ''
-                                  }`}>
-                                    <td className="px-2.5 py-1.5 text-zinc-500 font-mono">{idx + 1}</td>
-                                    <td className="px-2.5 py-1.5">
-                                      <div className="flex flex-col gap-0.5">
-                                        {(m.country || m.matchDate) && (
-                                          <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                                            {m.country && m.countryFlag && (
-                                              m.countryFlag.startsWith('http')
-                                                ? <img src={m.countryFlag} alt={m.country} className="w-3.5 h-2.5 object-cover rounded-[2px]" />
-                                                : <span className="text-xs">{m.countryFlag}</span>
-                                            )}
-                                            {m.country && <span>{m.country}</span>}
-                                            {m.country && m.matchDate && <span className="mx-0.5 opacity-50">•</span>}
-                                            {m.matchDate && (
-                                              <span className="text-zinc-400 font-mono flex items-center gap-0.5" title="Kickoff Time">
-                                                <Clock className="w-2.5 h-2.5" />
-                                                {(() => {
-                                                  try {
-                                                    return format(parseISO(m.matchDate), 'HH:mm');
-                                                  } catch {
-                                                    return String(m.matchDate).split('T')[1]?.substring(0, 5) || String(m.matchDate);
-                                                  }
-                                                })()}
-                                              </span>
-                                            )}
-                                          </span>
-                                        )}
-                                        <span className="text-zinc-300 inline-flex items-center gap-1 flex-wrap">
-                                          <TeamWithLogo teamName={m.homeTeam} size={14} textClassName="text-xs" />
-                                          <span className="text-zinc-600 mx-0.5">vs</span>
-                                          <TeamWithLogo teamName={m.awayTeam} size={14} textClassName="text-xs" />
-                                        </span>
-                                      </div>
-                                    </td>
-                                    {jackpot.variations.map((v, vi) => (
-                                      <td key={vi} className="px-2 py-1.5 text-center">
-                                        <span className="font-mono font-bold text-blue-400 text-sm">{v[originalIdx] || '-'}</span>
-                                      </td>
-                                    ))}
-                                    <td className="px-2 py-1.5 text-center">
-                                      {m.result === 'won' ? (
-                                        <span className="text-[10px] font-black text-blue-400 bg-blue-500/15 px-2 py-0.5 rounded-full uppercase">Won</span>
-                                      ) : m.result === 'lost' ? (
-                                        <span className="text-[10px] font-black text-red-400 bg-red-500/15 px-2 py-0.5 rounded-full uppercase">Lost</span>
-                                      ) : m.result === 'postponed' ? (
-                                        <span className="text-[10px] font-black text-orange-400 bg-orange-500/15 px-2 py-0.5 rounded-full uppercase">PPD</span>
-                                      ) : (
-                                        <span className="text-[10px] text-zinc-600">—</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </React.Fragment>
-                          );
-                        });
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : isUnlocked ? (
-              <div className="bg-zinc-950/50 border border-blue-500/20 rounded-xl p-4 mb-4 text-center">
-                <p className="text-sm text-zinc-500">No variations added yet.</p>
-              </div>
-            ) : (
-              <div className="bg-zinc-950/50 border border-zinc-800 rounded-xl p-5 mb-4 text-center">
-                <Lock className="w-7 h-7 text-gold-400/40 mx-auto mb-2" />
-                <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">
-                  {jackpot.match_count || jackpot.matches?.length || 0} matches • {variationCount} variations locked
-                </p>
-              </div>
-            )}
-
-            {!isUnlocked && (
-              <div className="flex flex-col sm:flex-row gap-2">
-                <button
-                  onClick={handlePurchase}
-                  className="flex-1 py-3 bg-gold-500 text-zinc-950 font-bold rounded-xl text-sm hover:bg-gold-400 transition-all shadow-lg shadow-gold-500/20"
-                >
-                  Unlock {jackpot.currency_symbol || 'KES'} {jackpot.price.toLocaleString(undefined, { minimumFractionDigits: jackpot.price % 1 !== 0 ? 2 : 0 })}
-                </button>
-                {onGetFree && (
-                  <button
-                    onClick={(e) => { e.preventDefault(); onGetFree(); }}
-                    className="flex-1 py-3 flex items-center justify-center gap-1.5 bg-blue-600 text-white font-bold rounded-xl text-sm hover:bg-blue-500 transition-all shadow-lg shadow-blue-500/20"
-                  >
-                    <Gift className="w-4 h-4" />
-                    Get Free
-                  </button>
-                )}
-              </div>
-            )}
-
-            {isUnlocked && (
-              <div className="w-full py-3 bg-blue-600/20 text-blue-400 font-bold rounded-xl text-sm text-center border border-blue-500/30">
-                ✓ Predictions Unlocked
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-// ─── Main Page ───────────────────────────────────────────────
 export function TipsPage() {
-  const { user, hasAccess, hasJackpotAccess, setShowAuthModal, setShowPricingModal, setShowJackpotModal, setSelectedJackpot } = useUser();
-  const [activeTab, setActiveTab] = useState<'free' | 'tips' | 'jackpot'>('free');
-  const [jackpotSubTab, setJackpotSubTab] = useState<'all' | 'midweek' | 'mega'>('all');
-  const [stats, setStats] = useState({ total: 0, won: 0, lost: 0, pending: 0, voided: 0, postponed: 0, winRate: 0 });
-  const [jackpots, setJackpots] = useState<JackpotPrediction[]>([]);
-  const [bundleInfo, setBundleInfo] = useState<JackpotBundleInfo | null>(null);
-  const [tipsByCategory, setTipsByCategory] = useState<Record<string, Tip[]>>({});
+  const { user, hasAccess, setShowAuthModal, setShowPricingModal } = useUser();
+  const [activeTab, setActiveTab] = useState<TipsTab>('free');
   const [freeTips, setFreeTips] = useState<Tip[]>([]);
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
-  const [showScreenshotWarning, setShowScreenshotWarning] = useState(false);
-  const [showReferralModal, setShowReferralModal] = useState<boolean | string | number>(false);
-  const [loadingTips, setLoadingTips] = useState(true);
-  const [loadingJackpot, setLoadingJackpot] = useState(true);
+  const [premiumTips, setPremiumTips] = useState<Tip[]>([]);
   const [pricingTiers, setPricingTiers] = useState<TierConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showScreenshotWarning, setShowScreenshotWarning] = useState(false);
 
-  const filteredJackpots = jackpots.filter((jackpot) => jackpotSubTab === 'all' || jackpot.type === jackpotSubTab);
-
-  // ─── 3D Carousel Mobile State ────────────────────────────────
-  const [activeMobileIndex, setActiveMobileIndex] = useState(1);
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
-  const handleTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const pxDistance = touchStart - touchEnd;
-    const minDistance = 40;
-    
-    const maxIndex = pricingTiers.filter(t => t.id === 'basic' || t.id === 'standard' || t.id === 'premium').length - 1;
-    
-    if (pxDistance > minDistance && activeMobileIndex < maxIndex) {
-      setActiveMobileIndex(prev => prev + 1);
-    }
-    if (pxDistance < -minDistance && activeMobileIndex > 0) {
-      setActiveMobileIndex(prev => prev - 1);
-    }
-  };
-
-  const structData = {
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    "name": "Expert Football Betting Tips & Jackpot Predictions",
-    "description": "Premium sports intelligence hub providing expert data-driven football predictions and jackpot analysis.",
-    "publisher": {
-      "@type": "Organization",
-      "name": "Chama Yetu Pamoja",
-      "logo": "https://chamayetupamoja.com/logo.png"
-    }
-  };
+  const premiumUnlocked = hasAccess('premium');
+  const paidTiers = pricingTiers.filter((tier) => tier.id !== 'free' && tier.price > 0);
+  const pendingPremium = premiumTips.filter((tip) => tip.result === 'pending').length;
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Common screenshot keys: PrintScreen or Cmd+Shift+3/4/5
-      if (e.key === 'PrintScreen' || 
-         (e.metaKey && e.shiftKey && (e.key === '3' || e.key === '4' || e.key === '5'))) {
-        
-        // Let the OS take the screenshot of the blurred overlay instead
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key === 'PrintScreen' ||
+        (event.metaKey && event.shiftKey && (event.key === '3' || event.key === '4' || event.key === '5'))
+      ) {
         setShowScreenshotWarning(true);
-
-        // Wipe clipboard to deter simple scraping
-        if (navigator.clipboard) {
-          navigator.clipboard.writeText('Chama Yetu Pamoja is protected. Share your link to get free access!').catch(() => {});
-        }
       }
     };
 
@@ -524,846 +405,213 @@ export function TipsPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const toggleCategory = (cat: string) => {
-    setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
-  };
-
-  // ─── Auto-polling: fetch tips & jackpots every 30s ────────
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
 
-    const fetchData = async (isInitial = false) => {
-      if (isInitial) {
-        setLoadingTips(true);
-        setLoadingJackpot(true);
-      }
+    const loadData = async (initial = false) => {
+      if (initial) setLoading(true);
+      const [freeData, premiumData, tiersData] = await Promise.all([
+        getFreeTips(),
+        getPremiumTips(),
+        getPricingTiers(),
+      ]);
 
-      // Fetch all tip categories in parallel
-      const tipsPromise = Promise.all(
-        CATEGORY_ORDER.map(async cat => {
-          const tips = await getTipsByCategory(cat);
-          return { cat, tips };
-        })
-      );
-      const jackpotPromise = getAllJackpots();
-      const bundlePromise = getJackpotBundleInfo();
-      const pricingTiersPromise = getPricingTiers();
-      const freeTipsPromise = getFreeTips();
-
-      const [tipsResults, jackpotResults, bundleResult, fetchedTiers, fetchedFreeTips] = await Promise.all([tipsPromise, jackpotPromise, bundlePromise, pricingTiersPromise, freeTipsPromise]);
-
-      if (!isMounted) return;
-
-      const newMap: Record<string, Tip[]> = {};
-      tipsResults.forEach(r => { newMap[r.cat] = r.tips; });
-      setTipsByCategory(newMap);
-      setFreeTips(fetchedFreeTips);
-      setJackpots(
-        [...jackpotResults].sort((a, b) => {
-          const freeDiff = Number(a.price !== 0) - Number(b.price !== 0);
-          if (freeDiff !== 0) return freeDiff;
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        })
-      );
-      setBundleInfo(bundleResult);
-      setPricingTiers(fetchedTiers);
-
-      if (isInitial) {
-        setLoadingTips(false);
-        setLoadingJackpot(false);
-      }
+      if (!mounted) return;
+      setFreeTips(freeData);
+      setPremiumTips(premiumData);
+      setPricingTiers(tiersData);
+      if (initial) setLoading(false);
     };
 
-    // Initial fetch
-    fetchData(true);
-
-    // Poll every 30 seconds, but only when the tab is visible
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    const startPolling = () => {
-      if (!intervalId) {
-        intervalId = setInterval(() => fetchData(false), 15_000);
-      }
-    };
-
-    const stopPolling = () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-
-    const handleVisibility = () => {
-      if (document.hidden) {
-        stopPolling();
-      } else {
-        // Fetch immediately on return, then resume interval
-        fetchData(false);
-        startPolling();
-      }
-    };
-
-    startPolling();
-    document.addEventListener('visibilitychange', handleVisibility);
+    void loadData(true);
+    const interval = window.setInterval(() => void loadData(false), 15000);
 
     return () => {
-      isMounted = false;
-      stopPolling();
-      document.removeEventListener('visibilitychange', handleVisibility);
+      mounted = false;
+      window.clearInterval(interval);
     };
-  }, [user?.subscription.tier, JSON.stringify(user?.purchasedJackpotIds)]);
+  }, []);
+
+  const seoData = {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: 'Expert Football Betting Tips',
+    description: 'Daily free football tips and premium predictions from Chama Yetu Pamoja.',
+    publisher: {
+      '@type': 'Organization',
+      name: 'Chama Yetu Pamoja',
+      logo: 'https://chamayetutips.com/cyp-logo.png',
+    },
+  };
 
   return (
-    <div className="container mx-auto px-4 py-6 sm:py-10 max-w-[1400px]">
-      <SEO 
-        title={activeTab === 'tips' ? 'Expert Football Betting Tips' : 'Sportpesa Jackpot Predictions'}
-        description="Get data-driven football predictions, daily free tips, and expert jackpot analysis for Sportpesa Midweek and Mega Jackpots. Stop guessing, start winning."
-        keywords="football tips, betting predictions, sportpesa jackpot, mega jackpot, midweek jackpot, soccer picks, vip tips"
-        canonical="https://chamayetupamoja.com/tips"
-        structData={structData}
+    <div className="container mx-auto max-w-[1400px] px-4 py-6 sm:py-10">
+      <SEO
+        title="Expert Football Betting Tips"
+        description="Daily free football tips and premium predictions from Chama Yetu Pamoja."
+        keywords="football tips, premium football predictions, free football tips, betting tips"
+        canonical="https://chamayetutips.com/"
+        structData={seoData}
       />
-      {/* Header */}
+
       <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-display font-bold uppercase mb-2">Chama Predictions</h1>
-        <p className="text-sm text-zinc-400">Exclusive winning strategies for the Chama Yetu community</p>
+        <h1 className="text-2xl font-black uppercase tracking-wide text-white sm:text-3xl">Chama Predictions</h1>
+        <p className="mt-2 text-sm text-zinc-400">Exclusive winning strategies for the Chama Yetu community</p>
       </div>
 
-      {/* Detached: Stats Banner */}
+      <div className="flex flex-col gap-8 lg:flex-row lg:gap-12">
+        <div className="w-full shrink-0 lg:sticky lg:top-24 lg:w-64">
+          <h3 className="mb-3 hidden px-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 lg:block">
+            Platform Navigation
+          </h3>
+          <div className="grid grid-cols-3 gap-2 rounded-sm border-2 border-zinc-900 bg-zinc-950 p-1 shadow-[4px_4px_0_rgba(24,24,27,0.8)] lg:grid-cols-1 lg:border-none lg:bg-transparent lg:p-0 lg:shadow-none">
+            <button
+              onClick={() => setActiveTab('free')}
+              className={`flex items-center justify-center gap-2 rounded-sm border-l-4 px-4 py-3 text-sm font-black uppercase tracking-widest transition-all lg:justify-start lg:px-5 ${
+                activeTab === 'free'
+                  ? 'border-amber-500 bg-zinc-900 text-amber-500 lg:shadow-[2px_2px_0_rgba(245,158,11,0.2)]'
+                  : 'border-transparent text-zinc-500 hover:bg-zinc-900/50 hover:text-zinc-300'
+              }`}
+            >
+              <Gift className="w-4 h-4 lg:w-5 lg:h-5" />
+              <span className="flex-1 text-left">Free</span>
+              {activeTab === 'free' && <ChevronRight className="hidden w-4 h-4 lg:block" />}
+            </button>
+            <button
+              onClick={() => setActiveTab('premium')}
+              className={`flex items-center justify-center gap-2 rounded-sm border-l-4 px-4 py-3 text-sm font-black uppercase tracking-widest transition-all lg:justify-start lg:px-5 ${
+                activeTab === 'premium'
+                  ? 'border-amber-500 bg-zinc-900 text-amber-500 lg:shadow-[2px_2px_0_rgba(245,158,11,0.2)]'
+                  : 'border-transparent text-zinc-500 hover:bg-zinc-900/50 hover:text-zinc-300'
+              }`}
+            >
+              <TrendingUp className="w-4 h-4 lg:w-5 lg:h-5" />
+              <span className="flex-1 text-left">Premium</span>
+              {activeTab === 'premium' && <ChevronRight className="hidden w-4 h-4 lg:block" />}
+            </button>
+            <button
+              onClick={() => setActiveTab('archive')}
+              className={`flex items-center justify-center gap-2 rounded-sm border-l-4 px-3 py-3 text-[10px] sm:text-xs md:text-sm font-black uppercase tracking-widest transition-all lg:justify-start lg:px-5 ${
+                activeTab === 'archive'
+                  ? 'border-indigo-500 bg-zinc-900 text-indigo-500 lg:shadow-[2px_2px_0_rgba(99,102,241,0.2)]'
+                  : 'border-transparent text-zinc-500 hover:bg-zinc-900/50 hover:text-zinc-300'
+              }`}
+            >
+              <Shield className="w-4 h-4 lg:w-5 lg:h-5" />
+              <span className="flex-1 text-center lg:text-left truncate">Archive</span>
+              {activeTab === 'archive' && <ChevronRight className="hidden w-4 h-4 lg:block" />}
+            </button>
+          </div>
 
-      {/* Referral Modal (opened from locked tip cards) */}
-
-
-      {/* 2-Column Dashboard Layout */}
-      <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 w-full mt-4">
-        
-        {/* Left Sidebar Navigation (Desktop) & Top Segmented Nav (Mobile) */}
-        <div className="w-full lg:w-64 shrink-0 flex flex-col gap-3 sticky lg:top-24 z-20 bg-zinc-950 lg:bg-transparent pb-2 lg:pb-0">
-           <h3 className="text-zinc-500 font-bold mb-1 uppercase tracking-widest text-[10px] px-2 hidden lg:block">Platform Navigation</h3>
-           <div className="grid grid-cols-3 lg:grid-cols-1 lg:flex-col gap-2 border-2 border-zinc-900 bg-zinc-950 p-1 rounded-sm shadow-[4px_4px_0_rgba(24,24,27,0.8)] lg:shadow-none lg:border-none lg:p-0 lg:bg-transparent">
-             <button
-               onClick={() => setActiveTab('free')}
-               className={`flex-1 text-center lg:text-left py-2 lg:py-3.5 rounded-sm transition-all duration-300 font-black uppercase tracking-widest text-[10px] lg:text-sm flex flex-col lg:flex-row items-center justify-center lg:items-start lg:justify-start gap-1 lg:gap-3 lg:border-l-[4px] lg:px-5 ${
-                 activeTab === 'free' ? 'border-amber-500 bg-zinc-900 text-amber-500 lg:shadow-[2px_2px_0_rgba(245,158,11,0.2)]' : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/50'
-               }`}
-             >
-               <Gift className={`w-4 h-4 lg:w-5 lg:h-5 ${activeTab === 'free' ? 'animate-pulse' : ''}`} />
-               <span className="whitespace-nowrap flex-1">Free</span>
-               {activeTab === 'free' && <ChevronRight className="w-4 h-4 hidden lg:block" />}
-             </button>
-             <button
-               onClick={() => setActiveTab('tips')}
-               className={`flex-1 text-center lg:text-left py-2 lg:py-3.5 rounded-sm transition-all duration-300 font-black uppercase tracking-widest text-[10px] lg:text-sm flex flex-col lg:flex-row items-center justify-center lg:items-start lg:justify-start gap-1 lg:gap-3 lg:border-l-[4px] lg:px-5 ${
-                 activeTab === 'tips' ? 'border-amber-500 bg-zinc-900 text-amber-500 lg:shadow-[2px_2px_0_rgba(245,158,11,0.2)]' : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/50'
-               }`}
-             >
-               <Zap className="w-4 h-4 lg:w-5 lg:h-5" />
-               <span className="whitespace-nowrap flex-1">Premium</span>
-               {activeTab === 'tips' && <ChevronRight className="w-4 h-4 hidden lg:block" />}
-             </button>
-             <button
-               onClick={() => setActiveTab('jackpot')}
-               className={`flex-1 text-center lg:text-left py-2 lg:py-3.5 rounded-sm transition-all duration-300 font-black uppercase tracking-widest text-[10px] lg:text-sm flex flex-col lg:flex-row items-center justify-center lg:items-start lg:justify-start gap-1 lg:gap-3 lg:border-l-[4px] lg:px-5 ${
-                 activeTab === 'jackpot' ? 'border-amber-500 bg-zinc-900 text-amber-500 lg:shadow-[2px_2px_0_rgba(245,158,11,0.2)]' : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/50'
-               }`}
-             >
-               <Trophy className="w-4 h-4 lg:w-5 lg:h-5" />
-               <span className="whitespace-nowrap flex-1">Jackpots</span>
-               {activeTab === 'jackpot' && <ChevronRight className="w-4 h-4 hidden lg:block" />}
-             </button>
-           </div>
         </div>
 
-        {/* Content Area (Takes remaining width) */}
-        <div className="flex-1 w-full min-w-0">
-
-      
-      {/* Free Tips Tab */}
-      {activeTab === 'free' && (
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <div className="mb-6 flex items-center justify-between bg-gradient-to-r from-blue-900/40 via-blue-800/20 to-transparent border-l-4 border-l-blue-500 border-y border-y-white/5 border-r border-r-white/5 p-5 rounded-r-3xl rounded-l-md">
-            <div>
-              <h2 className="text-white font-black font-display text-xl tracking-wide flex items-center gap-2">
-                <Gift className="w-6 h-6 text-blue-400" />
-                CYP FREE PICKS
-              </h2>
-              <p className="text-xs text-zinc-400 mt-1">100% unlocked predictions for our community</p>
+        <div className="min-w-0 flex-1">
+          <div className={`mb-6 rounded-r-3xl rounded-l-md border-y border-r border-white/5 border-l-4 p-5 bg-gradient-to-r to-transparent ${
+            activeTab === 'free' ? 'border-l-blue-500 from-blue-900/40 via-blue-800/20' : 
+            activeTab === 'premium' ? 'border-l-amber-500 from-amber-900/40 via-amber-800/20' :
+            'border-l-indigo-500 from-indigo-900/40 via-indigo-800/20'
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className={`rounded-xl p-2.5 ${
+                activeTab === 'free' ? 'bg-blue-600/20 text-blue-400' : 
+                activeTab === 'premium' ? 'bg-amber-500/20 text-amber-400' :
+                'bg-indigo-600/20 text-indigo-400'
+              }`}>
+                {activeTab === 'free' ? <Gift className="w-6 h-6" /> : 
+                 activeTab === 'premium' ? <Crown className="w-6 h-6" /> :
+                 <Shield className="w-6 h-6" />}
+              </div>
+              <div>
+                <h2 className="font-display text-xl font-bold uppercase tracking-wide text-white">
+                  {activeTab === 'free' ? 'CYP Free Picks' : 
+                   activeTab === 'premium' ? 'CYP Premium Picks' :
+                   'VIP Archives'}
+                </h2>
+                <p className="mt-1 text-xs text-zinc-400">
+                  {activeTab === 'free'
+                    ? '100% unlocked predictions for our community'
+                    : activeTab === 'premium' 
+                      ? (premiumUnlocked
+                          ? 'Full premium board unlocked for your account'
+                          : 'One premium board. Subscribe once to unlock every paid tip')
+                      : (premiumUnlocked
+                          ? 'Full history of past premium results'
+                          : 'Preview past premium performance. Subscribe to unlock history')}
+                </p>
+              </div>
             </div>
           </div>
-          
-          <div className="grid grid-cols-1 gap-6">
-            {loadingTips ? (
-              <div className="flex justify-center items-center py-20">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-              </div>
-            ) : (() => {
-              const freeTipsByCat = freeTips.reduce((acc, tip) => {
-                const c = tip.category || '2+';
-                if (!acc[c]) acc[c] = [];
-                acc[c].push(tip);
-                return acc;
-              }, {} as Record<string, import('../services/tipsService').Tip[]>);
 
-              const availableCategories = Object.keys(freeTipsByCat).sort();
-
-              if (availableCategories.length === 0) {
-                return (
-                   <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-12 text-center">
-                     <Gift className="w-12 h-12 text-blue-500/20 mx-auto mb-4" />
-                     <p className="text-zinc-500 font-bold">No free tips available today. Check out our Daily Tips!</p>
-                   </div>
-                );
-              }
-
-              return availableCategories.map(cat => {
-                const tips = freeTipsByCat[cat];
-                const catInfo = CATEGORY_LABELS[cat as TipCategory] || { label: cat.toUpperCase(), desc: 'Free Tips', minTier: 'free' };
-                const Icon = CATEGORY_ICONS[cat as TipCategory] || Gift;
-                const isExpanded = expandedCategories[`free-${cat}`];
-                
-                if (tips.length === 0) return null;
-
-                const pendingTips = tips.filter(t => t.result === 'pending');
-                const historyTips = tips.filter(t => t.result !== 'pending');
-                const displayedHistory = isExpanded ? historyTips : historyTips.slice(0, 2);
-                const displayedTips = [...pendingTips, ...displayedHistory];
-
-                return (
-                  <div key={`free-${cat}`} className="bg-zinc-950/90 border-2 border-zinc-800 rounded-sm overflow-hidden transition-transform duration-300 shadow-[6px_6px_0_rgb(39,39,42)] hover:border-zinc-700 mb-6 group">
-                    <div className="p-6 pb-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-xl bg-blue-600/20 text-blue-400">
-                            <Icon className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <h4 className="text-base font-bold text-white uppercase tracking-wide flex items-center gap-2">
-                              {catInfo.label.toUpperCase().includes('TIPS') ? catInfo.label.toUpperCase() : `${catInfo.label.toUpperCase()} TIPS`}
-                              <span className="bg-blue-600/20 text-blue-400 px-2 py-0.5 rounded text-[10px] uppercase font-black">FREE</span>
-                            </h4>
-                            <p className="text-xs text-zinc-400 font-medium mt-0.5">
-                              {tips.length} Prediction{tips.length !== 1 ? 's' : ''}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      {/* Unlock CTA for categories with paid tips */}
-                      {catInfo.minTier !== 'free' && (!user || !hasAccess(cat as TipCategory)) && (
-                        <button
-                          onClick={() => {
-                            if (!user) setShowAuthModal(true);
-                            else setShowPricingModal(true, cat as TipCategory);
-                          }}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gold-500/10 hover:bg-gold-500/20 border border-gold-500/20 text-gold-400 text-xs font-bold uppercase tracking-wider transition-all group"
-                        >
-                          <Crown className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                          Unlock More Expert {catInfo.label} Tips
-                          <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="bg-black/40 border-t border-zinc-800 overflow-hidden mx-2 mb-2 rounded-3xl">
-                      <div className="max-h-[32rem] overflow-auto scrollbar-thin scrollbar-thumb-zinc-800">
-                        <table className="w-full text-xs">
-                          <thead className="sticky top-0 bg-zinc-900 z-10">
-                            <tr className="border-b border-zinc-800">
-                              <th className="px-2.5 py-2 text-left text-zinc-500 font-bold uppercase tracking-wider w-7">#</th>
-                              <th className="px-2.5 py-2 text-left text-zinc-500 font-bold uppercase tracking-wider">Match</th>
-                              <th className="px-2 py-2 text-center text-blue-400 font-bold uppercase tracking-wider w-24">Tip</th>
-                              <th className="px-2 py-2 text-center text-zinc-500 font-bold uppercase tracking-wider w-16">Result</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(() => {
-                              const labelsOrder: string[] = [];
-                              const groupedTips = displayedTips.reduce((acc, tip) => {
-                                const dateObj = new Date(tip.matchDate);
-                                let label = format(dateObj, 'MMM d, yyyy');
-                                if (isToday(dateObj)) label = 'Today';
-                                else if (isTomorrow(dateObj)) label = 'Tomorrow';
-                                else if (isYesterday(dateObj)) label = 'Yesterday';
-                                
-                                if (!acc[label]) {
-                                  acc[label] = [];
-                                  labelsOrder.push(label);
-                                }
-                                acc[label].push(tip);
-                                return acc;
-                              }, {} as Record<string, import('../services/tipsService').Tip[]>);
-
-                              let globalIdx = 0;
-                              return labelsOrder.map(dateLabel => {
-                                const groupTips = groupedTips[dateLabel];
-                                return (
-                                  <React.Fragment key={dateLabel}>
-                                    <tr className="bg-zinc-800/40 border-b border-zinc-800">
-                                      <td colSpan={4} className="px-2.5 py-1 w-full text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">
-                                        —— {dateLabel} ——
-                                      </td>
-                                    </tr>
-                                    {groupTips.map((tip) => {
-                                      const idx = globalIdx++;
-                                      return (
-                                        <tr key={tip.id} className={`border-b border-zinc-800/50 last:border-0 ${
-                                          tip.result === 'won' ? 'bg-blue-500/5' : tip.result === 'lost' ? 'bg-red-500/5' : ''
-                                        }`}>
-                                          <td className="px-2.5 py-1.5 text-zinc-500 font-mono">{idx + 1}</td>
-                                          <td className="px-2.5 py-1.5">
-                                            <div className="flex flex-col gap-0.5">
-                                              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                                                {tip.league && <LeagueLogo leagueName={tip.league} size={12} />}
-                                                {tip.league && <span>{tip.league}</span>}
-                                                {tip.league && tip.matchDate && <span className="mx-0.5 opacity-50">•</span>}
-                                                {tip.matchDate && (
-                                                  <span className="text-zinc-400 font-mono flex items-center gap-0.5" title="Kickoff Time">
-                                                    <Clock className="w-2.5 h-2.5" />
-                                                    {new Date(tip.matchDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                  </span>
-                                                )}
-                                              </span>
-                                              <Link to={`/match/${tip.fixtureId}`} className="text-zinc-300 inline-flex items-center gap-1 flex-wrap hover:text-blue-400 transition-colors">
-                                                <TeamWithLogo teamName={tip.homeTeam} size={14} textClassName="text-xs" />
-                                                <span className="text-zinc-600 mx-0.5">vs</span>
-                                                <TeamWithLogo teamName={tip.awayTeam} size={14} textClassName="text-xs" />
-                                              </Link>
-                                            </div>
-                                          </td>
-                                          <td className="px-2 py-1.5 text-center">
-                                            <div className="flex flex-col items-center justify-center h-full py-1">
-                                              <span className="font-bold text-blue-400 text-sm leading-none block mb-0.5 whitespace-nowrap">{tip.prediction}</span>
-                                              <span className="text-[9px] text-zinc-500 font-bold uppercase leading-none">{tip.odds && `@${tip.odds}`}</span>
-                                            </div>
-                                          </td>
-                                          <td className="px-2 py-1.5 text-center align-middle">
-                                            {tip.result === 'won' ? (
-                                              <span className="text-[10px] font-black text-blue-400 bg-blue-600/10 px-2 py-0.5 rounded-full uppercase border border-blue-500/20 mx-auto block w-fit">WON</span>
-                                            ) : tip.result === 'lost' ? (
-                                              <span className="text-[10px] font-black text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full uppercase mx-auto block w-fit">LOST</span>
-                                            ) : tip.result === 'void' ? (
-                                              <span className="text-[10px] font-black text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded-full uppercase mx-auto block w-fit">VOID</span>
-                                            ) : tip.result === 'postponed' ? (
-                                              <span className="text-[10px] font-black text-orange-400 bg-orange-500/15 px-2 py-0.5 rounded-full uppercase mx-auto block w-fit">PPD</span>
-                                            ) : (
-                                              <span className="text-[10px] text-zinc-600 mx-auto block w-fit">—</span>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </React.Fragment>
-                                );
-                              });
-                            })()}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                    {historyTips.length > 2 && (
-                      <div className="bg-zinc-900 border-t border-zinc-800 p-2">
-                        <button
-                          onClick={() => setExpandedCategories(prev => ({ ...prev, [`free-${cat}`]: !prev[`free-${cat}`] }))}
-                          className="w-full py-2 flex items-center justify-center gap-1.5 text-xs font-bold text-blue-400 hover:text-emerald-300 hover:bg-blue-600/10 rounded-lg transition-colors"
-                        >
-                          {isExpanded ? (
-                            <>Collapse History</>
-                          ) : (
-                            <>View All History ({historyTips.length}) <ChevronRight className="w-3.5 h-3.5" /></>
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              });
-            })()}
-          </div>
-        </div>
-      )}
-
-      {/* Daily Tips Tab */}
-      {activeTab === 'tips' && (
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-          {(!user || !hasAccess('vip')) && pricingTiers.length > 0 && (() => {
-            const paidTiers = pricingTiers.filter(t => t.id !== 'free' && t.price > 0);
-            if (paidTiers.length === 0) return null;
-            return (
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Crown className="w-5 h-5 text-blue-500" />
-                <h3 className="text-lg font-bold text-white">Subscription Plans</h3>
-              </div>
-              <div 
-                className="group relative w-full overflow-x-hidden sm:overflow-visible grid grid-cols-1 sm:grid-cols-3 sm:gap-4 touch-pan-y focus:outline-none"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  const maxIndex = paidTiers.length - 1;
-                  if (e.key === 'ArrowLeft' && activeMobileIndex > 0) setActiveMobileIndex(p => p - 1);
-                  if (e.key === 'ArrowRight' && activeMobileIndex < maxIndex) setActiveMobileIndex(p => p + 1);
-                }}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-              >
-                {paidTiers.map((pkg, idx) => {
-                  const perDay = pkg.durationDays > 0 ? Math.round(pkg.price / pkg.durationDays) : 0;
-
-                  // 3D calculation
-                  const offset = idx - activeMobileIndex;
-                  const absOffset = Math.abs(offset);
-                  const isMobileActive = offset === 0;
-
-                  return (
-                    <div 
-                      key={pkg.id} 
-                      className={`
-                        col-start-1 row-start-1 sm:col-start-auto sm:row-start-auto
-                        justify-self-center sm:justify-self-auto
-                        w-[75vw] sm:w-auto h-full relative
-                        bg-zinc-950/90 border-2 ${pkg.popular ? 'border-amber-500 shadow-[6px_6px_0_rgb(245,158,11)]' : 'border-zinc-800 shadow-[4px_4px_0_rgb(39,39,42)]'} 
-                        rounded-sm p-5 flex flex-col transition-transform duration-300 hover:-translate-y-1
-                        max-sm:[transform:translateX(var(--mob-tx))_scale(var(--mob-s))]
-                        max-sm:[z-index:var(--mob-z)]
-                        max-sm:[opacity:var(--mob-op)]
-                        max-sm:[pointer-events:var(--mob-pe)]
-                      `}
-                      style={{
-                        '--mob-tx': `${offset * 75}%`,
-                        '--mob-s': isMobileActive ? 1 : 0.85,
-                        '--mob-z': isMobileActive ? 30 : 10,
-                        '--mob-op': absOffset > 1 ? 0 : 1,
-                        '--mob-pe': isMobileActive ? 'auto' : 'none',
-                      } as React.CSSProperties}
-                    >
-                      {pkg.popular && (
-                        <div className="absolute top-3 right-[-30px] bg-blue-600 text-white text-[10px] font-bold px-8 py-1 rotate-45 shadow-sm transform-gpu">
-                          POPULAR
-                        </div>
-                      )}
-                      
-                      <div className="flex justify-between items-start mb-3 relative z-10">
-                        <h4 className="text-lg font-black text-white">{pkg.name.replace(' Plan', '')}</h4>
-                        {pkg.originalPrice && pkg.originalPrice > pkg.price && (
-                          <span className={`bg-blue-600/10 text-blue-400 border border-blue-500/20 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${pkg.popular ? 'mr-10 mt-1' : ''}`}>
-                            Save {Math.round((1 - pkg.price / pkg.originalPrice) * 100)}%
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div className="flex flex-col gap-1 mb-4">
-                        {pkg.originalPrice && pkg.originalPrice > pkg.price && (
-                          <div className="h-4 flex items-end">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-black text-zinc-500 line-through decoration-red-500/80 decoration-2">
-                                {pkg.currency_symbol || 'KES'} {pkg.originalPrice.toLocaleString()}
-                              </span>
-                              <span className="text-[9px] font-black tracking-wider text-red-400 uppercase bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20">
-                                Original
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                        <div className="flex items-end gap-1.5 pt-0.5">
-                          <div className="text-3xl font-black text-white leading-none whitespace-nowrap tracking-tight">
-                            <span className="text-base text-blue-500 mr-1 font-bold">{pkg.currency_symbol || 'KES'}</span>
-                            {pkg.price.toLocaleString()}
-                          </div>
-                          <div className="text-[10px] text-zinc-500 font-black whitespace-nowrap leading-none mb-1 uppercase tracking-widest">/ {pkg.durationDays} days</div>
-                        </div>
-                        {perDay > 0 && (
-                          <p className="text-[10px] text-zinc-500 font-medium mt-1">
-                            Only <span className="text-blue-400 font-bold">{perDay} KES</span> per day
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex-1 mb-4 flex flex-col">
-                        <span className="text-[10px] text-zinc-500 font-bold mb-2 uppercase tracking-widest">Full Access To:</span>
-                        <div className="flex flex-wrap gap-1.5">
-                           {pkg.categories.filter(c => c !== 'free').map(c => (
-                             <span key={c} className="bg-blue-600/10 text-blue-400 border border-blue-500/20 text-[10px] font-bold px-2 py-1 rounded-md uppercase leading-tight text-center whitespace-nowrap overflow-hidden text-ellipsis w-auto">
-                               {CATEGORY_LABELS[c]?.label || c}
-                             </span>
-                           ))}
-                        </div>
-                      </div>
-                      
-                      <button 
-                         onClick={(e) => { 
-                           e.preventDefault(); 
-                           if (!user) setShowAuthModal(true); 
-                           else setShowPricingModal(true, undefined, pkg.id); 
-                         }}
-                         className={`w-full py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-                           pkg.popular 
-                             ? 'bg-emerald-500 hover:bg-blue-500 text-zinc-950 shadow-md shadow-blue-500/20' 
-                             : 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700'
-                         }`}
-                       >
-                         GET {pkg.durationDays} DAYS ACCESS
-                       </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            );
-          })()}
-          {loadingTips ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-pulse">
-              <div className="h-64 bg-zinc-900/60 border border-zinc-800 rounded-2xl" />
-              <div className="h-64 bg-zinc-900/60 border border-zinc-800 rounded-2xl" />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {CATEGORY_ORDER.map(cat => {
-                const tips = tipsByCategory[cat] || [];
-                const catInfo = CATEGORY_LABELS[cat];
-                const Icon = CATEGORY_ICONS[cat];
-                const userHasAccess = hasAccess(cat);
-                const isExpanded = expandedCategories[cat];
-                
-                if (tips.length === 0) return null;
-
-                // Split strictly between upcoming/live and historical
-                const pendingTips = tips.filter(t => t.result === 'pending');
-                const historyTips = tips.filter(t => t.result !== 'pending');
-                
-                // Show maximum 2 historical matches by default to prevent huge scrolling blocks
-                const displayedHistory = isExpanded ? historyTips : historyTips.slice(0, 2);
-                const displayedTips = [...pendingTips, ...displayedHistory];
-
-                return (
-                  <div key={cat} className="bg-zinc-950/90 border-2 border-zinc-800 rounded-sm overflow-hidden transition-transform shadow-[4px_4px_0_rgb(39,39,42)] hover:border-zinc-700 group">
-                    <div className="p-6 pb-4">
-                      {/* Category Header Mimicking JackpotCard */}
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2.5 rounded-xl ${
-                            cat === 'free' ? 'bg-blue-600/20 text-blue-400' :
-                            cat === 'vip' ? 'bg-gold-500/20 text-gold-400' :
-                            'bg-blue-500/20 text-blue-400'
-                          }`}>
-                            <Icon className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <h4 className="text-base font-bold text-white uppercase tracking-wide">
-                              {catInfo.label.toUpperCase().includes('TIPS') ? catInfo.label.toUpperCase() : `${catInfo.label.toUpperCase()} TIPS`}
-                            </h4>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <p className="text-xs text-zinc-400 font-medium">
-                              {tips.length} Prediction{tips.length !== 1 ? 's' : ''}
-                            </p>
-                            {!userHasAccess && (
-                              <span className="px-2 py-0.5 bg-zinc-800 text-zinc-500 text-[10px] font-bold uppercase rounded-full flex items-center gap-1">
-                                <Lock className="w-2.5 h-2.5" /> {catInfo.minTier} plan
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-
-                    {/* NEW: Master Unlock Buttons for the Category */}
-                      {!userHasAccess && pendingTips.length > 0 && (
-                        <div className="flex flex-col sm:flex-row gap-2 mb-4">
-                          <button
-                            onClick={(e) => { 
-                              e.preventDefault(); 
-                              if (!user) setShowAuthModal(true); 
-                              else setShowPricingModal(true, cat); 
-                            }}
-                            className="flex-1 py-2.5 px-2 bg-gold-500/10 hover:bg-gold-500/20 border border-gold-500/20 rounded-xl text-xs text-gold-400 font-bold uppercase flex items-center justify-center gap-1.5 transition-colors"
-                          >
-                            <Lock className="w-4 h-4" /> Unlock
-                          </button>
-
-                          {user && (
-                            <button 
-                              onClick={(e) => { e.preventDefault(); void 0; }}
-                              className="flex-1 py-2.5 px-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-xs text-white font-bold uppercase flex items-center justify-center gap-1.5 transition-colors"
-                            >
-                              <Gift className="w-4 h-4" /> Get for Free
-                            </button>
-                          )}
-                        </div>
-                      )}
-
-
-                    {/* Tips Table */}
-                    <div className="bg-black/40 border-t border-zinc-800 overflow-hidden mx-2 mb-2 rounded-3xl">
-                      <div className="max-h-[32rem] overflow-auto scrollbar-thin scrollbar-thumb-zinc-800">
-                        <table className="w-full text-xs">
-                          <thead className="sticky top-0 bg-zinc-900 z-10">
-                            <tr className="border-b border-zinc-800">
-                              <th className="px-2.5 py-2 text-left text-zinc-500 font-bold uppercase tracking-wider w-7">#</th>
-                              <th className="px-2.5 py-2 text-left text-zinc-500 font-bold uppercase tracking-wider">Match</th>
-                              <th className="px-2 py-2 text-center text-blue-400 font-bold uppercase tracking-wider w-24">Tip</th>
-                              <th className="px-2 py-2 text-center text-zinc-500 font-bold uppercase tracking-wider w-16">Result</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(() => {
-                              const labelsOrder: string[] = [];
-                              const groupedTips = displayedTips.reduce((acc, tip) => {
-                                const dateObj = new Date(tip.matchDate);
-                                let label = format(dateObj, 'MMM d, yyyy');
-                                if (isToday(dateObj)) label = 'Today';
-                                else if (isTomorrow(dateObj)) label = 'Tomorrow';
-                                else if (isYesterday(dateObj)) label = 'Yesterday';
-                                
-                                if (!acc[label]) {
-                                  acc[label] = [];
-                                  labelsOrder.push(label);
-                                }
-                                acc[label].push(tip);
-                                return acc;
-                              }, {} as Record<string, Tip[]>);
-
-                              let globalIdx = 0;
-                              return labelsOrder.map(dateLabel => {
-                                const groupTips = groupedTips[dateLabel];
-                                return (
-                                  <React.Fragment key={dateLabel}>
-                                    <tr className="bg-zinc-800/40 border-b border-zinc-800">
-                                      <td colSpan={4} className="px-2.5 py-1 w-full text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">
-                                        —— {dateLabel} ——
-                                      </td>
-                                    </tr>
-                                    {groupTips.map((tip) => {
-                                      const idx = globalIdx++;
-                                      const isTipUnlocked = user?.unlocked_tip_ids?.includes(Number(tip.id));
-                                      const locked = !userHasAccess && tip.result === 'pending' && !isTipUnlocked;
-                                      const onGetFree = (!userHasAccess && tip.result === 'pending' && !isTipUnlocked && user) ? () => void 0 : undefined;
-                                      
-                                      return (
-                                <tr key={tip.id} className={`border-b border-zinc-800/50 last:border-0 ${
-                                  tip.result === 'won' ? 'bg-blue-500/5' : tip.result === 'lost' ? 'bg-red-500/5' : tip.result === 'postponed' ? 'bg-orange-500/5' : ''
-                                }`}>
-                                  <td className="px-2.5 py-1.5 text-zinc-500 font-mono">{idx + 1}</td>
-                                  <td className="px-2.5 py-1.5">
-                                    <div className="flex flex-col gap-0.5">
-                                      <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                                        {tip.league && <LeagueLogo leagueName={tip.league} size={12} />}
-                                        {tip.league && <span>{tip.league}</span>}
-                                        {tip.league && tip.matchDate && <span className="mx-0.5 opacity-50">•</span>}
-                                        {tip.matchDate && (
-                                          <span className="text-zinc-400 font-mono flex items-center gap-0.5" title="Kickoff Time">
-                                            <Clock className="w-2.5 h-2.5" />
-                                            {new Date(tip.matchDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                          </span>
-                                        )}
-                                      </span>
-                                      {locked && tip.category?.toLowerCase() === 'gg' ? (
-                                        <div className="text-zinc-500 inline-flex items-center gap-1 flex-wrap mt-0.5">
-                                          <Lock className="w-3 h-3 text-gold-400/50" />
-                                          <span className="text-xs font-bold italic">Premium Match</span>
-                                        </div>
-                                      ) : (
-                                        <Link to={`/match/${tip.fixtureId}`} className="text-zinc-300 inline-flex items-center gap-1 flex-wrap hover:text-blue-400 transition-colors">
-                                          <TeamWithLogo teamName={tip.homeTeam} size={14} textClassName="text-xs" />
-                                          <span className="text-zinc-600 mx-0.5">vs</span>
-                                          <TeamWithLogo teamName={tip.awayTeam} size={14} textClassName="text-xs" />
-                                        </Link>
-                                      )}
-                                    </div>
-                                  </td>
-                                 <td className="px-2 py-1.5 text-center">
-                                    {locked ? (
-                                      <div className="flex flex-col items-center justify-center h-full py-1">
-                                        <span className="font-mono font-bold text-zinc-700 text-sm tracking-widest blur-[2px] leading-none">
-                                          •••
-                                        </span>
-                                      </div>
-                                    ) : (
-                                      <div className="flex flex-col items-center justify-center h-full py-1">
-                                        <span className="font-mono font-bold text-blue-400 text-sm leading-none">{tip.prediction}</span>
-                                        <div className="flex items-center justify-center gap-0.5 mt-1.5">
-                                          {[...Array(5)].map((_, i) => (
-                                            <Star key={i} className={`w-2 h-2 ${i < tip.confidence ? 'text-gold-400 fill-gold-400' : 'text-zinc-700'}`} />
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-1.5 text-center">
-                                    {tip.result === 'won' ? (
-                                      <span className="text-[10px] font-black text-blue-400 bg-blue-500/15 px-2 py-0.5 rounded-full uppercase">Won</span>
-                                    ) : tip.result === 'lost' ? (
-                                      <span className="text-[10px] font-black text-red-400 bg-red-500/15 px-2 py-0.5 rounded-full uppercase">Lost</span>
-                                    ) : tip.result === 'postponed' ? (
-                                      <span className="text-[10px] font-black text-orange-400 bg-orange-500/15 px-2 py-0.5 rounded-full uppercase">PPD</span>
-                                    ) : (
-                                      <span className="text-[10px] text-zinc-600">—</span>
-                                    )}
-                                  </td>
-                                </tr>
-                                      );
-                                    })}
-                                  </React.Fragment>
-                                );
-                              });
-                            })()}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                   {/* History Toggle */}
-                    {historyTips.length > 2 && (
-                      <div className="mt-5 text-center">
-                        <button 
-                          onClick={() => toggleCategory(cat)}
-                          className="text-[10px] font-bold text-zinc-500 hover:text-white uppercase tracking-wider transition-colors inline-flex items-center gap-1 bg-zinc-900/50 px-3 py-1.5 rounded-full border border-zinc-800 hover:border-zinc-700"
-                        >
-                          {isExpanded ? 'Hide Past History' : 'View More History'} 
-                          <ChevronRight className={`w-3 h-3 transition-transform ${isExpanded ? '-rotate-90' : 'rotate-90'}`} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            </div>
+          {activeTab === 'premium' && paidTiers.length > 0 && (
+            <PremiumPlansPreview
+              paidTiers={paidTiers}
+              pendingPremium={pendingPremium}
+              premiumUnlocked={premiumUnlocked}
+              onUnlock={() => {
+                if (!user) setShowAuthModal(true);
+                else setShowPricingModal(true);
+              }}
+            />
           )}
-        </div>
-      )}
 
-      {/* Jackpot Tab */}
-      {activeTab === 'jackpot' && (
-        <div>
-          <div className="mb-6">
-            <h2 className="text-lg font-display font-bold uppercase mb-1">Sportpesa Jackpot Predictions</h2>
-            <div className="mt-4 inline-flex rounded-xl border border-zinc-800 bg-zinc-900/60 p-1">
-              {[
-                { id: 'all', label: 'All' },
-                { id: 'midweek', label: 'Midweek' },
-                { id: 'mega', label: 'Mega' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setJackpotSubTab(tab.id as 'all' | 'midweek' | 'mega')}
-                  className={`rounded-lg px-4 py-2 text-sm font-bold transition-all ${
-                    jackpotSubTab === tab.id ? 'bg-gold-500 text-zinc-950' : 'text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {loadingJackpot ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-pulse">
-              <div className="h-64 bg-zinc-900/60 border border-zinc-800 rounded-2xl" />
-              <div className="h-64 bg-zinc-900/60 border border-zinc-800 rounded-2xl" />
-            </div>
-          ) : filteredJackpots.length > 0 ? (
-            <div className="space-y-6">
-              {/* Bundle Upsell Banner */}
-              {bundleInfo && bundleInfo.locked_count > 1 && (
-                <div className="bg-linear-to-r from-emerald-900/40 to-emerald-800/20 border border-blue-500/30 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-4 relative overflow-hidden">
-                  <div className="absolute -right-10 -top-10 w-40 h-40 bg-blue-600/10 blur-3xl rounded-full" />
-                  
-                  <div className="flex items-center gap-4 relative z-10 w-full sm:w-auto">
-                    <div className="w-12 h-12 bg-blue-600/20 border border-blue-500/30 rounded-full flex items-center justify-center shrink-0">
-                      <Gift className="w-6 h-6 text-blue-400" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-white mb-0.5">Unlock All Jackpots</h3>
-                      <p className="text-sm text-zinc-300">
-                        Get all {bundleInfo.locked_count} pending predictions and <span className="text-blue-400 font-bold">save {bundleInfo.discount_pct}%</span>
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto relative z-10">
-                    <div className="text-center sm:text-right">
-                      <p className="text-[10px] text-zinc-500 line-through">
-                        {bundleInfo.currency_symbol} {bundleInfo.original_price.toLocaleString(undefined, {minimumFractionDigits: bundleInfo.original_price % 1 !== 0 ? 2 : 0})}
-                      </p>
-                      <p className="font-black text-blue-400 text-lg leading-none">
-                        {bundleInfo.currency_symbol} {bundleInfo.discounted_price.toLocaleString(undefined, {minimumFractionDigits: bundleInfo.discounted_price % 1 !== 0 ? 2 : 0})}
-                      </p>
-                    </div>
-                    <button 
-                      onClick={() => {
-                        // Create a faux bundle jackpot prediction object for the modal
-                        const bundleJackpot: JackpotPrediction = {
-                          id: 'bundle',
-                          type: 'mega', // Visual only
-                          dcLevel: 5,
-                          matches: [],
-                          variations: [],
-                          price: bundleInfo.discounted_price,
-                          result: 'pending',
-                          currency: bundleInfo.currency,
-                          currency_symbol: bundleInfo.currency_symbol,
-                          createdAt: new Date().toISOString(),
-                          updatedAt: new Date().toISOString()
-                        };
-                        setSelectedJackpot(bundleJackpot);
-                        setShowJackpotModal(true);
-                      }}
-                      className="w-full sm:w-auto px-6 py-2.5 bg-emerald-500 hover:bg-blue-500 text-zinc-950 font-bold rounded-xl transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
-                    >
-                      <Lock className="w-4 h-4" />
-                      Unlock Bundle
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {filteredJackpots.map(j => {
-                  const isUnlocked = !j.locked;
-                  return (
-                    <JackpotCard 
-                      key={j.id} 
-                      jackpot={j} 
-                      onGetFree={(!isUnlocked && user) ? () => void 0 : undefined}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 text-center">
-              <Trophy className="w-10 h-10 text-zinc-700 mx-auto mb-3" />
-              <p className="text-zinc-400 mb-2">No {jackpotSubTab === 'all' ? '' : `${jackpotSubTab} `}jackpot predictions available yet</p>
-              <p className="text-xs text-zinc-600">Check back when the next Midweek or Mega Jackpot is announced</p>
-            </div>
+          {activeTab === 'archive' && (
+            <VipArchivesBoard
+              tips={premiumTips}
+              premiumUnlocked={premiumUnlocked}
+              onUnlock={() => {
+                if (!user) setShowAuthModal(true);
+                else setShowPricingModal(true);
+              }}
+            />
           )}
-        </div>
-      )}
 
-      {/* Anti-Screenshot Overlay */}
+          {loading ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="h-72 animate-pulse rounded-sm border border-zinc-800 bg-zinc-900/60" />
+              <div className="h-72 animate-pulse rounded-sm border border-zinc-800 bg-zinc-900/60" />
+            </div>
+          ) : activeTab === 'free' ? (
+            <TipTable
+              title="CYP Free Picks"
+              subtitle="100% unlocked predictions for our community"
+              tips={freeTips}
+            />
+          ) : activeTab === 'premium' ? (
+            <TipTable
+              title="CYP Premium Picks"
+              subtitle={premiumUnlocked ? 'Full premium board.' : 'Premium board is visible, but pending predictions remain locked until subscription.'}
+              tips={premiumTips}
+              locked={!premiumUnlocked}
+              onUnlock={() => {
+                if (!user) setShowAuthModal(true);
+                else setShowPricingModal(true);
+              }}
+            />
+          ) : null}
+        </div>
+      </div>
+
       {showScreenshotWarning && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/90 backdrop-blur-3xl p-4">
-          <div className="bg-zinc-950 border border-blue-500/30 rounded-2xl p-6 max-w-md w-full relative">
-            <button 
+        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/90 p-4 backdrop-blur-3xl">
+          <div className="relative w-full max-w-md rounded-2xl border border-blue-500/20 bg-zinc-950 p-6">
+            <button
               onClick={() => setShowScreenshotWarning(false)}
-              className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white bg-zinc-900 rounded-full"
+              className="absolute right-4 top-4 rounded-full bg-zinc-900 p-2 text-zinc-400 hover:text-white"
             >
               <X className="w-5 h-5" />
             </button>
-
-            <div className="text-center mb-6 mt-2">
-              <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
+            <div className="text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-red-500/20 bg-red-500/10">
                 <AlertTriangle className="w-8 h-8 text-red-500" />
               </div>
-              <h2 className="text-xl font-display font-bold text-white mb-2">Screenshot Detected</h2>
-              <p className="text-sm text-zinc-400">
-                Sharing screenshots of premium tips is heavily prohibited.
+              <h2 className="text-xl font-black text-white">Screenshot Detected</h2>
+              <p className="mt-2 text-sm text-zinc-400">
+                Premium content sharing is not allowed.
               </p>
             </div>
           </div>
         </div>
       )}
-      
-      </div> {/* End Content Area */}
-      </div> {/* End Dashboard Layout */}
     </div>
   );
 }

@@ -23,7 +23,6 @@ import { AdminLayout } from './components/admin/AdminLayout';
 import { DashboardPage } from './pages/admin/DashboardPage';
 import { UsersPage } from './pages/admin/UsersPage';
 import { TipsManagePage } from './pages/admin/TipsManagePage';
-import { JackpotsManagePage } from './pages/admin/JackpotsManagePage';
 import { RevenuePage } from './pages/admin/RevenuePage';
 import { PricingManagePage } from './pages/admin/PricingManagePage';
 import { BroadcastPage } from './pages/admin/BroadcastPage';
@@ -93,7 +92,6 @@ export default function App() {
               <Route index element={<DashboardPage />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="tips" element={<TipsManagePage />} />
-              <Route path="jackpots" element={<JackpotsManagePage />} />
               <Route path="revenue" element={<RevenuePage />} />
               <Route path="pricing" element={<PricingManagePage />} />
               <Route path="broadcast" element={<BroadcastPage />} />

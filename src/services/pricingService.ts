@@ -38,7 +38,7 @@ const DEFAULT_TIERS: TierConfig[] = [
     description: '5 days of immediate full access to all premium tips and odds.',
     price: 200,
     durationDays: 5,
-    categories: ['free', '2+', '4+', 'gg', '10+', 'vip'],
+    categories: ['free', 'premium'],
     popular: false,
   },
   {
@@ -47,7 +47,7 @@ const DEFAULT_TIERS: TierConfig[] = [
     description: '10 days of full access to all our premium football predictions.',
     price: 500,
     durationDays: 10,
-    categories: ['free', '2+', '4+', 'gg', '10+', 'vip'],
+    categories: ['free', 'premium'],
     popular: true,
   },
   {
@@ -56,18 +56,19 @@ const DEFAULT_TIERS: TierConfig[] = [
     description: 'Full 30 days of VIP access. Best value for serious players.',
     price: 1000,
     durationDays: 30,
-    categories: ['free', '2+', '4+', 'gg', '10+', 'vip'],
+    categories: ['free', 'premium'],
     popular: false,
   },
 ];
 
 export const CATEGORY_LABELS: Record<TipCategory, { label: string; minTier: SubscriptionTier }> = {
-  'free': { label: 'Free Tips', minTier: 'free' },
-  '2+': { label: '2+ Odds', minTier: 'basic' },
-  '4+': { label: '4+ Odds', minTier: 'standard' },
-  'gg': { label: 'GG (BTTS)', minTier: 'standard' },
-  '10+': { label: '10+ Odds', minTier: 'premium' },
-    'vip': { label: 'VIP Special (80+)', minTier: 'premium' },
+  free: { label: 'Free Tips', minTier: 'free' },
+  premium: { label: 'Premium Tips', minTier: '5day' },
+  '2+': { label: 'Premium Tips', minTier: '5day' },
+  '4+': { label: 'Premium Tips', minTier: '5day' },
+  gg: { label: 'Premium Tips', minTier: '5day' },
+  '10+': { label: 'Premium Tips', minTier: '5day' },
+  vip: { label: 'Premium Tips', minTier: '5day' },
 };
 
 let cachedTiers: TierConfig[] = [...DEFAULT_TIERS];
@@ -80,22 +81,22 @@ function ensureFreeTier(tiers: TierConfig[]): TierConfig[] {
 }
 
 export function hasAccessToCategory(userTier: SubscriptionTier, category: TipCategory): boolean {
-    if (category === 'free') return true;
-    if (userTier === '30day' || userTier === '10day' || userTier === '5day' || userTier === 'premium') return true;
-    
-    // Check if the current tier explicitly contains the category
-    const tierConfig = cachedTiers.find(t => t.id === userTier);
-    if (tierConfig && tierConfig.categories.includes(category)) {
-        return true;
-    }
-    
-    // Fallback logic for legacy users
-    const TIER_RANK: Record<string, number> = { free: 0, basic: 1, standard: 2, premium: 3, '5day': 3, '10day': 3, '30day': 3 };
-    const requiredTier = CATEGORY_LABELS[category]?.minTier || 'premium';
-    return (TIER_RANK[userTier] || 0) >= (TIER_RANK[requiredTier] || 3);
+  if (category === 'free') return true;
+  return userTier !== 'free';
 }
 
 const detectUserCountry = async () => 'KE';
+
+function normalizeTierCategories(categories: unknown, tierId: string): TipCategory[] {
+  const parsed = Array.isArray(categories)
+    ? categories
+    : JSON.parse(String(categories || '[]'));
+  if (tierId === 'free') {
+    return ['free'];
+  }
+  const hasPaidAccess = parsed.some((value: unknown) => String(value).toLowerCase() !== 'free');
+  return hasPaidAccess ? ['free', 'premium'] : ['premium'];
+}
 
 export async function getPricingTiers(): Promise<TierConfig[]> {
   try {
@@ -109,7 +110,7 @@ export async function getPricingTiers(): Promise<TierConfig[]> {
         description: t.description,
         price: t.price,
         durationDays: t.duration_days,
-        categories: Array.isArray(t.categories) ? t.categories : JSON.parse(t.categories || '[]'),
+        categories: normalizeTierCategories(t.categories, t.tier_id),
         popular: t.popular,
         currency: t.currency || 'KES',
         currency_symbol: t.currency_symbol || 'KES',
@@ -147,7 +148,7 @@ export async function updatePricingTier(tierId: string, updates: Partial<TierCon
       description: t.description,
       price: t.price,
       durationDays: t.duration_days,
-      categories: Array.isArray(t.categories) ? t.categories : JSON.parse(t.categories || '[]'),
+        categories: normalizeTierCategories(t.categories, t.tier_id),
       popular: t.popular,
     };
   } catch (error) {

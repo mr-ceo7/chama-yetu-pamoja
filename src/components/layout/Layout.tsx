@@ -7,14 +7,13 @@ import { AuthModal } from '../AuthModal';
 import { Toaster } from 'sonner';
 import { ReloadPrompt } from '../ReloadPrompt';
 import { PricingModal } from '../PricingModal';
-import { JackpotPurchaseModal } from '../JackpotPurchaseModal';
 import { CookieBanner } from '../CookieBanner';
 import { useUser } from '../../context/UserContext';
 import { usePageTracking } from '../../hooks/usePageTracking';
 import { FloatingHelpWidget } from '../FloatingHelpWidget';
 
 export function Layout() {
-  const { showPricingModal, setShowPricingModal, showJackpotModal, setShowJackpotModal, selectedJackpot, user } = useUser();
+  const { showPricingModal, setShowPricingModal } = useUser();
 
   // Initialize page-view tracking
   usePageTracking();
@@ -30,11 +29,6 @@ export function Layout() {
       <BottomNav />
       <AuthModal />
       <PricingModal isOpen={showPricingModal} onClose={() => setShowPricingModal(false)} />
-      <JackpotPurchaseModal 
-        isOpen={showJackpotModal} 
-        onClose={() => setShowJackpotModal(false)} 
-        jackpot={selectedJackpot} 
-      />
       <FloatingHelpWidget />
       <ReloadPrompt />
       <CookieBanner />

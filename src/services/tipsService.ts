@@ -1,6 +1,6 @@
 import apiClient, { resolveBackendAssetUrl } from './apiClient';
 
-export type TipCategory = 'free'|'2+' | '4+' | 'gg' | '10+' | 'vip';
+export type TipCategory = 'free' | 'premium' | '2+' | '4+' | 'gg' | '10+' | 'vip';
 export type JackpotType = 'midweek' | 'mega';
 export type DCLevel = 0 | 3 | 4 | 5 | 6 | 7 | 10 | 99;
 
