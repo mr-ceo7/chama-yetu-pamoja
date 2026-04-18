@@ -16,14 +16,14 @@ export function SEO({
   title, 
   description = "Chama Yetu Pamoja — Your premium sports intelligence hub. Get expert betting tips, live scores, match previews, and deep sports analytics. Stop Guessing. Start Winning.", 
   keywords = "sports, betting tips, football, soccer, live scores, fixtures, standings, premier league, la liga, analytics", 
-  url = "https://chamayetupamoja.com/", 
-  image = "https://chamayetupamoja.com/og-image.png",
+  url = "https://chamayetutips.com/", 
+  image = "https://chamayetutips.com/og-image.png",
   canonical,
   structData,
   noindex = false
 }: SEOProps) {
   const fullTitle = title ? `${title} — Chama Yetu Pamoja` : 'Chama Yetu Pamoja — Intelligent Sports Predictions';
-  const siteUrl = url || "https://chamayetupamoja.com/";
+  const siteUrl = url || "https://chamayetutips.com/";
 
   return (
     <Helmet>
@@ -47,6 +47,10 @@ export function SEO({
       <meta property="og:title" content={fullTitle} />
       <meta property="og:description" content={description} />
       <meta property="og:image" content={image} />
+      <meta property="og:image:secure_url" content={image} />
+      <meta property="og:image:type" content="image/png" />
+      <meta property="og:image:width" content="1024" />
+      <meta property="og:image:height" content="1024" />
 
       {/* Twitter */}
       <meta name="twitter:card" content="summary_large_image" />
