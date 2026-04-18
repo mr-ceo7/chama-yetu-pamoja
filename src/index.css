@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", "Inter", sans-serif;
+  --font-mono: "Share Tech Mono", ui-monospace, monospace;
+  
+  /* CYP Royal Blue + Gold Theme */
+  --color-pitch-dark: #0a0f1a;
+  --color-pitch-light: #111827;
+  --color-blue-600: #2563eb;
+  --color-blue-500: #3b82f6;
+  --color-blue-400: #60a5fa;
+  --color-amber-500: #f59e0b;
+  --color-amber-400: #fbbf24;
+  --color-gold-500: #f59e0b;
+  --color-gold-400: #fbbf24;
+  --color-emerald-500: #10b981;
+  --color-emerald-400: #34d399;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #09090b; /* zinc-950 */
+  color: #fafafa; /* zinc-50 */
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background-color: rgba(37, 99, 235, 0.3);
+  color: #fafafa;
+}
+
+/* Background Pattern */
+.bg-pitch {
+  background-color: var(--color-pitch-dark);
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 40px,
+    rgba(255, 255, 255, 0.015) 40px,
+    rgba(255, 255, 255, 0.015) 80px
+  ),
+  radial-gradient(circle at 50% 0%, rgba(37, 99, 235, 0.12) 0%, transparent 70%);
+}
+
+/* LED text effects */
+.text-led {
+  font-family: var(--font-mono);
+  text-shadow: 0 0 8px rgba(37, 99, 235, 0.6);
+}
+
+.text-led-gold {
+  font-family: var(--font-mono);
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+
+/* Hide scrollbar for ticker */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Marquee Animation */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* ── Admin Panel Utilities ─────────────────────────────── */
+.admin-input {
+  width: 100%;
+  background-color: #09090b;
+  border: 1px solid #27272a;
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: #fafafa;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+.admin-input:focus {
+  border-color: rgba(37, 99, 235, 0.5);
+}
+.admin-input::placeholder {
+  color: #52525b;
+}
