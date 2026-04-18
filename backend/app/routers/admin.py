@@ -20,7 +20,7 @@ from app.models.user import User
 from app.models.payment import Payment
 from app.models.tip import Tip
 from app.models.jackpot import Jackpot, JackpotPurchase
-# CYP: legacy_mpesa removed
+from app.models.legacy_mpesa import LegacyMpesaTransaction
 from app.models.subscription import SubscriptionTier
 from app.models.activity import UserActivity, AnonymousVisitor
 from app.models.ad import AdPost
@@ -29,15 +29,15 @@ from app.schemas.auth import UserResponse, AdminUserResponse
 from app.schemas.payment import PaymentResponse
 from app.schemas.ad import AdPostCreate, AdPostUpdate, AdPostResponse
 from app.services.email_service import send_broadcast_email, send_affiliate_approved_email
-# CYP: removed
-# CYP: removed
-# CYP: removed
-# CYP: removed
-# CYP: removed
-# CYP: removed
-# CYP: removed
-# CYP: removed
-# CYP: removed
+from app.services.legacy_mpesa_sync import (
+    fetch_latest_legacy_mpesa_records,
+    fetch_legacy_mpesa_records,
+    fetch_legacy_mpesa_records_before,
+    fetch_legacy_mpesa_records_between,
+    ensure_phone_user,
+    normalize_phone,
+    sync_legacy_mpesa_transactions,
+)
 from app.config import settings
 
 import re
@@ -2184,6 +2184,478 @@ async def delete_admin_ad(ad_id: int, db: AsyncSession = Depends(get_db), admin:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  AFFILIATE MARKETING MANAGEMENT
+#  LEGACY M-PESA SYNC (Till 806277, filter 804633)
 # ═══════════════════════════════════════════════════════════════
 UTC = timezone.utc
+
+
+async def _assign_legacy_queue_item(
+    db: AsyncSession,
+    *,
+    queue_item: LegacyMpesaTransaction,
+    assignment_mode: str,
+    tier: str | None,
+    duration_days: int | None,
+    jackpot_type: str | None,
+    jackpot_dc_level: int | None,
+    admin_id: int,
+) -> tuple[User, Payment]:
+    user = None
+    if queue_item.user_id:
+        user_res = await db.execute(select(User).where(User.id == queue_item.user_id))
+        user = user_res.scalar_one_or_none()
+
+    if not user:
+        user, _ = await ensure_phone_user(
+            db,
+            queue_item.phone,
+            first_name=queue_item.first_name,
+            other_name=queue_item.other_name,
+        )
+
+    _ensure_referral_code(user)
+    _ensure_magic_login_token(user)
+    user.sms_tips_enabled = True
+    user.is_active = True
+    db.add(user)
+    await db.flush()
+
+    payment = None
+    if queue_item.payment_id:
+        payment = (
+            await db.execute(select(Payment).where(Payment.id == queue_item.payment_id))
+        ).scalar_one_or_none()
+
+    if assignment_mode == "subscription":
+        assert tier is not None
+        assert duration_days is not None
+        _grant_subscription_access(user, tier, duration_days)
+        if payment is None:
+            payment = _create_subscription_payment(
+                user=user,
+                amount_paid=queue_item.amount,
+                tier=tier,
+                duration_days=duration_days,
+                admin_id=admin_id,
+                source="legacy_mpesa_assignment",
+                reference=f"LEGACY-MPESA-{queue_item.source_record_id}",
+                transaction_id=f"LEGACY-MPESA-{queue_item.source_record_id}",
+                extra_metadata={
+                    "legacy_transaction_id": queue_item.source_record_id,
+                    "legacy_queue_id": queue_item.id,
+                    "biz_no": queue_item.biz_no,
+                },
+            )
+        else:
+            payment.user_id = user.id
+            payment.item_type = "subscription"
+            payment.item_id = tier
+            payment.phone = user.phone
+            payment.email = user.email
+            payment.gateway_response = json.dumps(
+                {
+                    "source": "legacy_mpesa_sync",
+                    "legacy_transaction_id": queue_item.source_record_id,
+                    "legacy_queue_id": queue_item.id,
+                    "biz_no": queue_item.biz_no,
+                    "pending_assignment": False,
+                    "assignment_mode": "subscription",
+                    "assigned_tier": tier,
+                    "assigned_duration_days": duration_days,
+                    "admin_id": admin_id,
+                }
+            )
+        assigned_label = tier
+        assigned_duration_days = duration_days
+    else:
+        assert jackpot_type is not None
+        assert jackpot_dc_level is not None
+        jackpot = await _resolve_pending_jackpot(
+            db,
+            jackpot_type=jackpot_type,
+            jackpot_dc_level=jackpot_dc_level,
+        )
+        if payment is None:
+            payment = _create_jackpot_payment(
+                user=user,
+                amount_paid=queue_item.amount,
+                jackpot=jackpot,
+                admin_id=admin_id,
+                source="legacy_mpesa_assignment",
+                reference=f"LEGACY-MPESA-{queue_item.source_record_id}",
+                transaction_id=f"LEGACY-MPESA-{queue_item.source_record_id}",
+                extra_metadata={
+                    "legacy_transaction_id": queue_item.source_record_id,
+                    "legacy_queue_id": queue_item.id,
+                    "biz_no": queue_item.biz_no,
+                },
+            )
+            db.add(payment)
+            await db.flush()
+        else:
+            payment.user_id = user.id
+            payment.item_type = "jackpot"
+            payment.item_id = str(jackpot.id)
+            payment.phone = user.phone
+            payment.email = user.email
+            payment.gateway_response = json.dumps(
+                {
+                    "source": "legacy_mpesa_sync",
+                    "legacy_transaction_id": queue_item.source_record_id,
+                    "legacy_queue_id": queue_item.id,
+                    "biz_no": queue_item.biz_no,
+                    "pending_assignment": False,
+                    "assignment_mode": "jackpot",
+                    "jackpot_id": jackpot.id,
+                    "jackpot_type": jackpot.type,
+                    "jackpot_dc_level": jackpot.dc_level,
+                    "admin_id": admin_id,
+                }
+            )
+        purchase, created = await _grant_jackpot_access(
+            db,
+            user=user,
+            jackpot=jackpot,
+            payment_id=payment.id,
+        )
+        if not created:
+            raise HTTPException(status_code=400, detail="User already has access to the selected jackpot.")
+        assigned_label = _build_jackpot_assignment_label(jackpot)
+        assigned_duration_days = None
+
+    db.add(payment)
+    await db.flush()
+
+    queue_item.user_id = user.id
+    queue_item.payment_id = payment.id
+    queue_item.onboarding_status = "assigned"
+    queue_item.assigned_tier = assigned_label
+    queue_item.assigned_duration_days = assigned_duration_days
+    queue_item.assigned_at = datetime.now(UTC).replace(tzinfo=None)
+    db.add(queue_item)
+
+    return user, payment
+
+
+@router.post("/legacy-mpesa/sync")
+async def sync_legacy_mpesa_queue(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    if not settings.LEGACY_MPESA_DATABASE_URL:
+        raise HTTPException(status_code=400, detail="LEGACY_MPESA_DATABASE_URL is not configured.")
+
+    latest_source_id = int((
+        await db.execute(select(func.max(LegacyMpesaTransaction.source_record_id)))
+    ).scalar() or 0)
+
+    if latest_source_id > 0:
+        records = await fetch_legacy_mpesa_records(after_source_record_id=latest_source_id)
+    else:
+        records = await fetch_latest_legacy_mpesa_records()
+
+    stats = await sync_legacy_mpesa_transactions(db, records)
+
+    return {
+        "status": "success",
+        "fetched": len(records),
+        **stats,
+    }
+
+
+@router.post("/legacy-mpesa/backfill")
+async def backfill_legacy_mpesa_history(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    if not settings.LEGACY_MPESA_DATABASE_URL:
+        raise HTTPException(status_code=400, detail="LEGACY_MPESA_DATABASE_URL is not configured.")
+
+    earliest_source_id = int((
+        await db.execute(select(func.min(LegacyMpesaTransaction.source_record_id)))
+    ).scalar() or 0)
+
+    if earliest_source_id > 0:
+        records = await fetch_legacy_mpesa_records_before(before_source_record_id=earliest_source_id)
+    else:
+        records = await fetch_latest_legacy_mpesa_records()
+
+    stats = await sync_legacy_mpesa_transactions(db, records)
+
+    return {
+        "status": "success",
+        "mode": "backfill",
+        "fetched": len(records),
+        **stats,
+    }
+
+
+@router.post("/legacy-mpesa/import-range")
+async def import_legacy_mpesa_date_range(
+    body: LegacyMpesaDateRangeImportRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    if not settings.LEGACY_MPESA_DATABASE_URL:
+        raise HTTPException(status_code=400, detail="LEGACY_MPESA_DATABASE_URL is not configured.")
+
+    try:
+        date_from = datetime.strptime(body.date_from, "%Y-%m-%d").replace(tzinfo=None)
+        date_to = datetime.strptime(body.date_to, "%Y-%m-%d").replace(tzinfo=None)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be in YYYY-MM-DD format.")
+
+    if date_to < date_from:
+        raise HTTPException(status_code=400, detail="date_to must be on or after date_from.")
+
+    records = await fetch_legacy_mpesa_records_between(date_from=date_from, date_to=date_to)
+    stats = await sync_legacy_mpesa_transactions(db, records)
+
+    return {
+        "status": "success",
+        "mode": "date_range",
+        "date_from": body.date_from,
+        "date_to": body.date_to,
+        "fetched": len(records),
+        **stats,
+    }
+
+
+@router.get("/legacy-mpesa/queue", response_model=LegacyMpesaListResponse)
+async def list_legacy_mpesa_queue(
+    status_filter: str = Query("pending_assignment"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    filters = []
+    if status_filter != "all":
+        filters.append(LegacyMpesaTransaction.onboarding_status == status_filter)
+
+    total_stmt = select(func.count(LegacyMpesaTransaction.id))
+    if filters:
+        total_stmt = total_stmt.where(and_(*filters))
+    total = int((await db.execute(total_stmt)).scalar() or 0)
+
+    queue_stmt = (
+        select(LegacyMpesaTransaction, User.name, User.subscription_tier)
+        .outerjoin(User, User.id == LegacyMpesaTransaction.user_id)
+        .order_by(LegacyMpesaTransaction.paid_at.desc(), LegacyMpesaTransaction.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+    )
+    if filters:
+        queue_stmt = queue_stmt.where(and_(*filters))
+
+    rows = (await db.execute(queue_stmt)).all()
+    items = [
+        {
+            "id": item.id,
+            "source_record_id": item.source_record_id,
+            "biz_no": item.biz_no,
+            "phone": item.phone,
+            "first_name": item.first_name,
+            "other_name": item.other_name,
+            "amount": item.amount,
+            "paid_at": item.paid_at.isoformat() if item.paid_at else None,
+            "user_id": item.user_id,
+            "user_name": user_name,
+            "user_subscription_tier": subscription_tier,
+            "payment_id": item.payment_id,
+            "onboarding_status": item.onboarding_status,
+            "assigned_tier": item.assigned_tier,
+            "assigned_duration_days": item.assigned_duration_days,
+            "assigned_at": item.assigned_at.isoformat() if item.assigned_at else None,
+        }
+        for item, user_name, subscription_tier in rows
+    ]
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page if per_page else 0,
+    }
+
+
+@router.delete("/legacy-mpesa/queue", response_model=LegacyMpesaClearQueueResponse)
+async def clear_legacy_mpesa_queue(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    pending_ids = (
+        await db.execute(
+            select(LegacyMpesaTransaction.id)
+            .where(LegacyMpesaTransaction.onboarding_status == "pending_assignment")
+        )
+    ).scalars().all()
+
+    if not pending_ids:
+        return {
+            "status": "success",
+            "cleared": 0,
+        }
+
+    await db.execute(
+        delete(LegacyMpesaTransaction).where(LegacyMpesaTransaction.id.in_(pending_ids))
+    )
+    await db.commit()
+
+    return {
+        "status": "success",
+        "cleared": len(pending_ids),
+    }
+
+
+@router.delete("/legacy-mpesa/{queue_id}", response_model=LegacyMpesaDeleteQueueItemResponse)
+async def delete_legacy_mpesa_queue_item(
+    queue_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    queue_item = (
+        await db.execute(
+            select(LegacyMpesaTransaction).where(LegacyMpesaTransaction.id == queue_id)
+        )
+    ).scalar_one_or_none()
+    if not queue_item:
+        raise HTTPException(status_code=404, detail="Legacy transaction not found")
+    if queue_item.onboarding_status != "pending_assignment":
+        raise HTTPException(status_code=400, detail="Only pending legacy transactions can be deleted")
+
+    await db.delete(queue_item)
+    await db.commit()
+
+    return {
+        "status": "success",
+        "deleted_id": queue_id,
+    }
+
+
+@router.post("/legacy-mpesa/{queue_id}/assign")
+async def assign_legacy_mpesa_transaction(
+    queue_id: int,
+    body: LegacyMpesaAssignRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    jackpot = await _validate_assignment_payload(
+        db,
+        assignment_mode=body.assignment_mode,
+        tier=body.tier,
+        duration_days=body.duration_days,
+        jackpot_type=body.jackpot_type,
+        jackpot_dc_level=body.jackpot_dc_level,
+    )
+
+    queue_res = await db.execute(select(LegacyMpesaTransaction).where(LegacyMpesaTransaction.id == queue_id))
+    queue_item = queue_res.scalar_one_or_none()
+    if not queue_item:
+        raise HTTPException(status_code=404, detail="Legacy transaction not found")
+    if queue_item.onboarding_status == "assigned" and queue_item.payment_id:
+        raise HTTPException(status_code=400, detail="Legacy transaction has already been assigned")
+
+    user, payment = await _assign_legacy_queue_item(
+        db,
+        queue_item=queue_item,
+        assignment_mode=body.assignment_mode,
+        tier=body.tier,
+        duration_days=body.duration_days,
+        jackpot_type=body.jackpot_type,
+        jackpot_dc_level=body.jackpot_dc_level,
+        admin_id=admin.id,
+    )
+
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "status": "success",
+        "assignment_mode": body.assignment_mode,
+        "queue_id": queue_item.id,
+        "user_id": user.id,
+        "payment_id": payment.id,
+        "tier": user.subscription_tier,
+        "expires_at": user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
+        "jackpot_id": jackpot.id if jackpot else None,
+        "jackpot_type": jackpot.type if jackpot else None,
+        "jackpot_dc_level": jackpot.dc_level if jackpot else None,
+    }
+
+
+@router.post("/legacy-mpesa/assign-bulk")
+async def bulk_assign_legacy_mpesa_transactions(
+    body: LegacyMpesaBulkAssignRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    jackpot = await _validate_assignment_payload(
+        db,
+        assignment_mode=body.assignment_mode,
+        tier=body.tier,
+        duration_days=body.duration_days,
+        jackpot_type=body.jackpot_type,
+        jackpot_dc_level=body.jackpot_dc_level,
+    )
+
+    if body.apply_to_all_pending:
+        queue_items = (
+            await db.execute(
+                select(LegacyMpesaTransaction)
+                .where(LegacyMpesaTransaction.onboarding_status == "pending_assignment")
+                .order_by(LegacyMpesaTransaction.id.asc())
+            )
+        ).scalars().all()
+    else:
+        queue_ids = sorted({int(queue_id) for queue_id in body.queue_ids if int(queue_id) > 0})
+        if not queue_ids:
+            raise HTTPException(status_code=400, detail="Provide queue_ids or enable apply_to_all_pending.")
+        queue_items = (
+            await db.execute(
+                select(LegacyMpesaTransaction)
+                .where(LegacyMpesaTransaction.id.in_(queue_ids))
+                .order_by(LegacyMpesaTransaction.id.asc())
+            )
+        ).scalars().all()
+
+    if not queue_items:
+        raise HTTPException(status_code=404, detail="No legacy transactions found for bulk assignment.")
+
+    assigned = 0
+    skipped = 0
+    assigned_queue_ids: List[int] = []
+
+    for queue_item in queue_items:
+        if queue_item.onboarding_status == "assigned" and queue_item.payment_id:
+            skipped += 1
+            continue
+        await _assign_legacy_queue_item(
+            db,
+            queue_item=queue_item,
+            assignment_mode=body.assignment_mode,
+            tier=body.tier,
+            duration_days=body.duration_days,
+            jackpot_type=body.jackpot_type,
+            jackpot_dc_level=body.jackpot_dc_level,
+            admin_id=admin.id,
+        )
+        assigned += 1
+        assigned_queue_ids.append(queue_item.id)
+
+    await db.commit()
+
+    return {
+        "status": "success",
+        "assignment_mode": body.assignment_mode,
+        "tier": body.tier,
+        "duration_days": body.duration_days,
+        "assigned": assigned,
+        "skipped": skipped,
+        "processed": len(queue_items),
+        "assigned_queue_ids": assigned_queue_ids,
+        "jackpot_id": jackpot.id if jackpot else None,
+        "jackpot_type": jackpot.type if jackpot else None,
+        "jackpot_dc_level": jackpot.dc_level if jackpot else None,
+    }

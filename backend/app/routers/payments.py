@@ -212,8 +212,8 @@ async def _fulfill_payment(payment: Payment, user: User, db: AsyncSession):
                 )
                 db.add(purchase)
 
-    # === Affiliate Commission Logic ===
-    if locked_user.affiliate_id:
+    # === Affiliate Commission Logic (only if affiliate system exists) ===
+    if Affiliate and hasattr(locked_user, 'affiliate_id') and getattr(locked_user, 'affiliate_id', None):
         result_aff = await db.execute(select(Affiliate).where(Affiliate.id == locked_user.affiliate_id))
         affiliate = result_aff.scalar_one_or_none()
         

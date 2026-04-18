@@ -247,10 +247,10 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                   <motion.div key="selection" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
                     <div className="mb-3">
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{targetTierId ? 'Selected Plan' : 'Choose Plan'}</h3>
-                        {targetTierId && (
-                          <button onClick={() => setShowAllTiers(prev => !prev)} className="text-[10px] text-blue-400 hover:text-emerald-300 font-bold uppercase tracking-wider">
-                            {showAllTiers ? 'Show Best' : 'View All Plans'}
+                        <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{selectedTier ? 'Selected Plan' : 'Choose Plan'}</h3>
+                        {selectedTier && (
+                          <button onClick={() => setSelectedTier(null)} className="text-[10px] text-amber-400 hover:text-amber-300 font-bold uppercase tracking-wider py-1 transition-colors">
+                            Change Plan
                           </button>
                         )}
                       </div>
@@ -266,16 +266,9 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                       </div>
                       <div className="space-y-2">
                       {tiers.filter(t => {
-                        if (t.id === 'free') return false; // never show the free tier as a purchasable option
-                        // If opened generically (no target), show only the 3 bundle plans
-                        if (!targetTierId) return t.id === '5day' || t.id === '10day' || t.id === '30day';
-                        // If user toggled "View All Plans", show all paid tiers
-                        if (showAllTiers) return true;
-                        // Show the selected tier, or fall back to matching by target
+                        if (t.id === 'free') return false; 
                         if (selectedTier) return selectedTier.id === t.id;
-                        // selectedTier not yet set — match directly
-                        if (targetTierId) return t.id === targetTierId;
-                        return true;
+                        return t.id === '5day' || t.id === '10day' || t.id === '30day';
                       }).map(tier => {
                         const Icon = TIER_ICONS[tier.id] || Zap;
                         const dprice = tier.price;
@@ -366,14 +359,26 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
 
                     <AnimatePresence>
                       {selectedMethod === 'mpesa' && (
-                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-3 overflow-hidden">
-                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1.5">Safaricom Number</label>
-                          <div className="flex bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden focus-within:border-blue-500 transition-all">
-                            <div className="px-3 py-2.5 bg-zinc-900 border-r border-zinc-700 text-xs text-zinc-400 flex items-center gap-1.5">
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-4 overflow-hidden">
+                          <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-sm p-4 text-center mb-4 text-zinc-300 shadow-[2px_2px_0_rgba(245,158,11,0.15)]">
+                            <p className="text-[10px] uppercase tracking-widest font-black text-amber-500 mb-2">Manual M-Pesa Payment</p>
+                            <p className="text-[11px] mb-2 font-bold opacity-80">Lipa na M-Pesa • Buy Goods and Services</p>
+                            <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1 mt-4">Enter Till Number</p>
+                            <p className="text-4xl font-black text-white tracking-[0.1em] mb-4">806277</p>
+                            <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1 opacity-70">Amount to Pay</p>
+                            <p className="text-xl font-black text-amber-400 mb-6">{selectedTier?.currency_symbol || 'KES'} {selectedTier?.price.toLocaleString()}</p>
+                            <div className="bg-zinc-950/80 p-3 rounded-sm border border-zinc-800">
+                              <p className="text-[9px] text-zinc-400 uppercase font-black tracking-wider leading-relaxed">Wait for the M-Pesa confirmation SMS, then enter your phone number below to verify your subscription.</p>
+                            </div>
+                          </div>
+                          
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1.5 pl-1">Safaricom Number used to pay</label>
+                          <div className="flex bg-zinc-900 border-2 border-zinc-800 rounded-sm overflow-hidden focus-within:border-amber-500 transition-colors shadow-[2px_2px_0_rgb(39,39,42)]">
+                            <div className="px-3 py-3 bg-zinc-950 border-r-2 border-zinc-800 text-xs font-bold text-zinc-400 flex items-center gap-1.5">
                               <span>🇰🇪</span>
                               <span>+254</span>
                             </div>
-                            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="712345678" className="w-full bg-transparent px-3 py-2.5 text-white text-sm focus:outline-hidden font-mono" />
+                            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712345678" className="w-full bg-transparent px-3 py-3 text-white text-sm font-black focus:outline-none font-mono tracking-widest placeholder:text-zinc-700" />
                           </div>
                         </motion.div>
                       )}
@@ -384,7 +389,7 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                       disabled={processing || !selectedTier || !selectedMethod || loadingGeo}
                       className="w-full bg-amber-500 text-black font-black py-3 rounded-sm border-2 border-amber-600 shadow-[4px_4px_0_rgb(217,119,6)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(217,119,6)] transition-all disabled:opacity-50 uppercase tracking-wider"
                     >
-                      {processing ? 'Processing...' : `Get ${selectedTier?.name || 'Started'}`}
+                      {processing ? 'Processing...' : selectedMethod === 'mpesa' ? 'Verify Payment' : `Get ${selectedTier?.name || 'Started'}`}
                     </button>
                     <p className="text-center text-[9px] text-zinc-500 mt-2 uppercase tracking-widest font-bold">Instant access granted after payment</p>
                   </motion.div>

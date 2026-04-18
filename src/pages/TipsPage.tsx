@@ -545,8 +545,8 @@ export function TipsPage() {
           ) : activeTab === 'premium' ? (
             <TipTable
               title="CYP Premium Picks"
-              subtitle={premiumUnlocked ? 'Full premium board.' : 'Premium board is visible, but pending predictions remain locked until subscription.'}
-              tips={premiumTips}
+              subtitle={premiumUnlocked ? 'Full premium board (Pending matches).' : 'Premium board is visible, but pending predictions remain locked until subscription.'}
+              tips={premiumTips.filter(tip => tip.result === 'pending')}
               locked={!premiumUnlocked}
               onUnlock={() => {
                 if (!user) setShowAuthModal(true);
