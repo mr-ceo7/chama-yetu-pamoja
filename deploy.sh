@@ -3,16 +3,16 @@
 set -e
 
 # Setup Logging Directories
-DB_FILE="/var/www/v2.tambuatips.com/deploy-dashboard/deployments.json"
-LOG_DIR="/var/www/v2.tambuatips.com/deploy-dashboard/logs"
+DB_FILE="/var/www/chamayetutips.com/deploy-dashboard/deployments.json"
+LOG_DIR="/var/www/chamayetutips.com/deploy-dashboard/logs"
 mkdir -p "$LOG_DIR"
 if [ ! -f "$DB_FILE" ]; then echo "[]" > "$DB_FILE"; chown www-data:www-data "$DB_FILE"; fi
 
 echo "Starting Deployment..."
 
-cd /var/www/v2.tambuatips.com
+cd /var/www/chamayetutips.com
 git checkout .
-git pull origin main
+git pull origin master
 
 COMMIT=$(git rev-parse --short HEAD)
 LOG_FILE="$LOG_DIR/$COMMIT.log"
@@ -50,8 +50,8 @@ with open(db_file, 'w') as f: json.dump(data, f)
   cd ..
 
   # Restart Services
-  systemctl restart tambuatips-api
-  systemctl restart tambuatips-webhook
+  systemctl restart chamayetutips-api
+  systemctl restart chamayetutips-webhook
 
   echo "-----------------------------------"
   echo "Deployment Successful!"
@@ -73,7 +73,7 @@ pipenv install || true
 venv/bin/python -m alembic upgrade head || true
 cd ..
 
-systemctl restart tambuatips-api
-systemctl restart tambuatips-webhook
+systemctl restart chamayetutips-api
+systemctl restart chamayetutips-webhook
 
 echo "Deployment Successful!"

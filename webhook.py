@@ -11,13 +11,13 @@ except ImportError:
 
 WEBHOOK_SECRET = 'cyptips-deploy-secret-2026'
 SYSTEM_ALERT_SECRET = 'cyptips-internal-guard-2026'
-DEPLOY_SCRIPT = '/var/www/chamayetupamoja.com/deploy.sh'
-ROLLBACK_SCRIPT = '/var/www/chamayetupamoja.com/deploy-dashboard/rollback.sh'
-DEPLOY_DB = '/var/www/chamayetupamoja.com/deploy-dashboard/deployments.json'
-LOG_DIR = '/var/www/chamayetupamoja.com/deploy-dashboard/logs'
-PROJECT_DIR = '/var/www/chamayetupamoja.com'
-BE_ENV = '/var/www/chamayetupamoja.com/backend/.env'
-INTERNAL_ALERT_URL = 'http://127.0.0.1:8002/api/internal/system-alert'
+DEPLOY_SCRIPT = '/var/www/chamayetutips.com/deploy.sh'
+ROLLBACK_SCRIPT = '/var/www/chamayetutips.com/deploy-dashboard/rollback.sh'
+DEPLOY_DB = '/var/www/chamayetutips.com/deploy-dashboard/deployments.json'
+LOG_DIR = '/var/www/chamayetutips.com/deploy-dashboard/logs'
+PROJECT_DIR = '/var/www/chamayetutips.com'
+BE_ENV = '/var/www/chamayetutips.com/backend/.env'
+INTERNAL_ALERT_URL = 'http://127.0.0.1:8003/api/internal/system-alert'
 
 # AI Setup
 GEMINI_API_KEYS_STR = os.environ.get('GEMINI_API_KEYS', '')
@@ -256,6 +256,6 @@ if __name__ == "__main__":
     threading.Thread(target=monitor_disk, daemon=True).start()
     threading.Thread(target=monitor_logs, daemon=True).start()
     
-    server = HTTPServer(('127.0.0.1', 9000), WebhookHandler)
-    print('Webhook + Smart Monitor on port 9000')
+    server = HTTPServer(('127.0.0.1', 9001), WebhookHandler)
+    print('Webhook + Smart Monitor on port 9001')
     server.serve_forever()
