@@ -8,7 +8,7 @@ from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 
 from app.database import AsyncSessionLocal
 from app.security import decode_token
@@ -279,3 +279,4 @@ async def require_admin(user=Depends(get_current_user)):
     if not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
+UTC = timezone.utc

@@ -4,7 +4,7 @@ import os
 import shutil
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 
 from app.dependencies import get_db, require_admin
 from app.models.campaign import Campaign
@@ -168,3 +168,4 @@ async def track_campaign_event(event_type: str, revenue: float = 0.0):
     except Exception as e:
         import logging
         logging.error(f"Error tracking campaign event: {e}")
+UTC = timezone.utc

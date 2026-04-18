@@ -2,7 +2,7 @@
 Jackpot ORM model and JackpotPurchase model — replaces frontend localStorage jackpots.
 """
 
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from sqlalchemy import Column, BigInteger, String, Integer, Float, Date, DateTime, JSON, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 
@@ -44,3 +44,4 @@ class JackpotPurchase(Base):
 
     user = relationship("User", back_populates="jackpot_purchases")
     jackpot = relationship("Jackpot", back_populates="purchases")
+UTC = timezone.utc

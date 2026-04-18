@@ -13,7 +13,7 @@ from app.models.jackpot import Jackpot, JackpotPurchase
 from app.models.setting import AdminSetting
 from app.schemas.jackpot import JackpotCreate, JackpotUpdate, JackpotResponse, JackpotLockedResponse
 from app.services.pricing import get_pricing_region
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from fastapi import Query, BackgroundTasks
 
 router = APIRouter(prefix="/api/jackpots", tags=["Jackpots"])
@@ -283,3 +283,4 @@ async def delete_jackpot(jackpot_id: int, db: AsyncSession = Depends(get_db), ad
     await db.execute(delete(JackpotPurchase).where(JackpotPurchase.jackpot_id == jackpot_id))
     await db.delete(jp)
     await db.commit()
+UTC = timezone.utc

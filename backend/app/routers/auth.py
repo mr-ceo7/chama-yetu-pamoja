@@ -6,7 +6,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 import random
 import os
 import string
@@ -681,3 +681,4 @@ async def track_activity(
         
     await db.commit()
     return {"status": "ok"}
+UTC = timezone.utc

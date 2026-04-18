@@ -6,7 +6,7 @@ import csv
 import io
 import json
 from typing import Dict, List, Optional
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
@@ -2186,4 +2186,4 @@ async def delete_admin_ad(ad_id: int, db: AsyncSession = Depends(get_db), admin:
 # ═══════════════════════════════════════════════════════════════
 #  AFFILIATE MARKETING MANAGEMENT
 # ═══════════════════════════════════════════════════════════════
-
+UTC = timezone.utc

@@ -5,7 +5,7 @@ All gateways are implemented but controlled by PAYMENTS_LIVE env flag.
 
 import asyncio
 import uuid
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -656,3 +656,4 @@ async def get_payment_status(payment_id: int, db: AsyncSession = Depends(get_db)
         raise HTTPException(status_code=403, detail="Not authorized to view this payment")
         
     return payment
+UTC = timezone.utc

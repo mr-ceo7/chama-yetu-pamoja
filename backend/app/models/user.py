@@ -2,7 +2,7 @@
 User ORM model — extends the existing MySQL `users` table.
 """
 
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean, Text, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 
@@ -85,3 +85,4 @@ class UserSession(Base):
 
     # Relationship back to User
     user = relationship("User", back_populates="sessions")
+UTC = timezone.utc
