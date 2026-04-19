@@ -12,22 +12,13 @@ import {
   Star,
   TrendingUp,
   X,
-  Zap,
 } from 'lucide-react';
 import { format, isToday, isTomorrow, isYesterday } from 'date-fns';
 import { LeagueLogo, TeamWithLogo } from '../components/TeamLogo';
 import { SEO } from '../components/SEO';
-import { useUser } from '../context/UserContext';
 import { getFreeTips, getPremiumTips, type Tip } from '../services/tipsService';
-import { getPricingTiers, type TierConfig } from '../services/pricingService';
 
 type TipsTab = 'free' | 'premium' | 'archive';
-
-const PLAN_ICONS: Record<string, React.ElementType> = {
-  '5day': Zap,
-  '10day': Star,
-  '30day': Crown,
-};
 
 function getDateLabel(matchDate: string): string {
   const date = new Date(matchDate);
@@ -48,18 +39,9 @@ function groupTipsByDate(tips: Tip[]) {
   return Array.from(grouped.entries());
 }
 
-export function buildVipArchiveTips(tips: Tip[], premiumUnlocked: boolean): Tip[] {
+export function buildVipArchiveTips(tips: Tip[], _premiumUnlocked: boolean): Tip[] {
   const settledTips = tips.filter((tip) => tip.result !== 'pending');
-  if (premiumUnlocked) {
-    return settledTips;
-  }
-
-  const wins = settledTips.filter((tip) => tip.result === 'won');
-  const losses = settledTips.filter((tip) => tip.result === 'lost');
-  const others = settledTips.filter((tip) => tip.result !== 'won' && tip.result !== 'lost');
-  const allowedLosses = Math.min(losses.length, Math.max(0, Math.floor(wins.length * 0.4)));
-
-  return [...wins, ...losses.slice(0, allowedLosses), ...others].sort(
+  return settledTips.sort(
     (a, b) => new Date(b.matchDate).getTime() - new Date(a.matchDate).getTime()
   );
 }
@@ -207,65 +189,17 @@ function TipTable({
   );
 }
 
-function PremiumPlansPreview({
-  paidTiers,
-  onUnlock,
-}: {
-  paidTiers: TierConfig[];
-  onUnlock: () => void;
-}) {
-  return (
-    <div className="mb-6">
-      <div className="grid grid-cols-3 gap-1.5 sm:gap-4">
-        {paidTiers.map((tier) => {
-          const Icon = PLAN_ICONS[tier.id] || Crown;
-          return (
-            <button
-              key={tier.id}
-              onClick={onUnlock}
-              className={`relative rounded-sm border sm:border-2 p-2 sm:p-4 flex flex-col items-center text-center sm:items-start text-left shadow-[2px_2px_0_rgb(39,39,42)] sm:shadow-[4px_4px_0_rgb(39,39,42)] transition-all hover:-translate-y-1 active:translate-y-0 focus:outline-none ${
-                tier.popular
-                  ? 'border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20'
-                  : 'border-zinc-800 bg-zinc-900/70 hover:bg-zinc-800'
-              }`}
-            >
-              {tier.popular && (
-                <span className="absolute -top-1.5 right-1 sm:right-3 sm:top-3 rounded-sm bg-amber-500 px-1 py-0.5 sm:px-2 sm:py-1 text-[7px] sm:text-[9px] font-black uppercase tracking-tight sm:tracking-widest text-zinc-950 shadow-md">
-                  🔥 Best
-                </span>
-              )}
-              <div className="mb-2 sm:mb-4 inline-flex rounded-md sm:rounded-sm bg-zinc-950 p-1.5 sm:p-2 text-amber-400 shadow-inner">
-                <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
-              </div>
-              <p className="text-[10px] sm:text-lg font-black uppercase tracking-tighter sm:tracking-wide text-white leading-tight drop-shadow-sm line-clamp-2">{tier.name}</p>
-              <p className="mt-2 hidden sm:block min-h-[40px] text-xs text-zinc-400 leading-relaxed text-left">{tier.description}</p>
-              <div className="mt-auto w-full pt-2 sm:mt-5 sm:border-t sm:border-zinc-800 sm:pt-4 text-center sm:text-left">
-                <p className="text-sm sm:text-2xl font-black text-amber-400 whitespace-nowrap">
-                  <span className="text-[9px] sm:text-sm text-amber-500/70 mr-0.5">{tier.currency_symbol || 'KES'}</span>
-                  {tier.price.toLocaleString()}
-                </p>
-                <p className="mt-0.5 sm:mt-1 text-[8px] sm:text-[11px] font-bold uppercase tracking-widest text-zinc-500 whitespace-nowrap">
-                  {tier.durationDays} days
-                </p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function VipArchivesBoard({
   tips,
   premiumUnlocked,
-  onUnlock,
 }: {
   tips: Tip[];
   premiumUnlocked: boolean;
-  onUnlock: () => void;
 }) {
   const archiveTips = useMemo(() => buildVipArchiveTips(tips, premiumUnlocked), [tips, premiumUnlocked]);
+  const groupedTips = useMemo(() => groupTipsByDate(archiveTips), [archiveTips]);
+  const overallWon = archiveTips.filter((tip) => tip.result === 'won').length;
+  const overallLost = archiveTips.filter((tip) => tip.result === 'lost').length;
 
   return (
     <div className="mb-8 rounded-sm border-2 border-zinc-800 bg-zinc-950/90 shadow-[4px_4px_0_rgb(39,39,42)] overflow-hidden">
@@ -275,20 +209,13 @@ function VipArchivesBoard({
             <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">VIP Archives</p>
             <h2 className="mt-2 text-xl font-black uppercase tracking-wide text-white">Premium results archive</h2>
             <p className="mt-2 max-w-2xl text-sm text-zinc-300">
-              {premiumUnlocked
-                ? 'Full settled premium history for members.'
-                : 'Preview of recent premium performance. Full archive unlocks with a premium plan.'}
+              Public archive of all settled premium results after each tip has been marked won or lost.
             </p>
           </div>
-          {!premiumUnlocked && (
-            <button
-              onClick={onUnlock}
-              className="inline-flex items-center justify-center gap-2 rounded-sm border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm font-black uppercase tracking-widest text-blue-300 hover:bg-blue-500/15"
-            >
-              <Lock className="w-4 h-4" />
-              Unlock Full Archive
-            </button>
-          )}
+          <div className="inline-flex items-center justify-center gap-2 rounded-sm border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-black uppercase tracking-widest text-emerald-300">
+            <CheckCircle2 className="w-4 h-4" />
+            {overallWon}W/{overallLost}L
+          </div>
         </div>
       </div>
 
@@ -309,33 +236,54 @@ function VipArchivesBoard({
                   </tr>
                 </thead>
                 <tbody>
-                  {archiveTips.map((tip) => (
-                    <tr key={`archive-${tip.id}`} className="border-b border-zinc-800/50 last:border-0">
-                      <td className="px-3 py-2">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                            <LeagueLogo leagueName={tip.league} size={12} />
-                            <span>{tip.league}</span>
-                            <span className="opacity-50">•</span>
-                            {getDateLabel(tip.matchDate)}
-                          </span>
-                          <span className="inline-flex items-center gap-1 text-zinc-300">
-                            <TeamWithLogo teamName={tip.homeTeam} size={14} textClassName="text-xs" />
-                            <span className="mx-0.5 text-zinc-600">vs</span>
-                            <TeamWithLogo teamName={tip.awayTeam} size={14} textClassName="text-xs" />
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        <span className="text-sm font-bold text-blue-400">{tip.prediction}</span>
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${resultBadge(tip.result)}`}>
-                          {tip.result}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {groupedTips.map(([label, items]) => {
+                    const wonCount = items.filter((tip) => tip.result === 'won').length;
+                    const lostCount = items.filter((tip) => tip.result === 'lost').length;
+
+                    return (
+                      <React.Fragment key={label}>
+                        <tr className="border-b border-zinc-800 bg-zinc-800/30">
+                          <td colSpan={3} className="px-3 py-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                                {label}
+                              </span>
+                              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-300">
+                                {wonCount}W/{lostCount}L
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        {items.map((tip) => (
+                          <tr key={`archive-${tip.id}`} className="border-b border-zinc-800/50 last:border-0">
+                            <td className="px-3 py-2">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                                  <LeagueLogo leagueName={tip.league} size={12} />
+                                  <span>{tip.league}</span>
+                                  <span className="opacity-50">•</span>
+                                  {new Date(tip.matchDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                                <span className="inline-flex items-center gap-1 text-zinc-300">
+                                  <TeamWithLogo teamName={tip.homeTeam} size={14} textClassName="text-xs" />
+                                  <span className="mx-0.5 text-zinc-600">vs</span>
+                                  <TeamWithLogo teamName={tip.awayTeam} size={14} textClassName="text-xs" />
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className="text-sm font-bold text-blue-400">{tip.prediction}</span>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${resultBadge(tip.result)}`}>
+                                {tip.result}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -347,16 +295,13 @@ function VipArchivesBoard({
 }
 
 export function TipsPage() {
-  const { user, hasAccess, setShowAuthModal, setShowPricingModal } = useUser();
   const [activeTab, setActiveTab] = useState<TipsTab>('free');
   const [freeTips, setFreeTips] = useState<Tip[]>([]);
   const [premiumTips, setPremiumTips] = useState<Tip[]>([]);
-  const [pricingTiers, setPricingTiers] = useState<TierConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [showScreenshotWarning, setShowScreenshotWarning] = useState(false);
 
-  const premiumUnlocked = hasAccess('premium');
-  const paidTiers = pricingTiers.filter((tier) => tier.id !== 'free' && tier.price > 0);
+  const premiumUnlocked = true;
   const pendingPremium = premiumTips.filter((tip) => tip.result === 'pending').length;
 
   useEffect(() => {
@@ -378,16 +323,14 @@ export function TipsPage() {
 
     const loadData = async (initial = false) => {
       if (initial) setLoading(true);
-      const [freeData, premiumData, tiersData] = await Promise.all([
+      const [freeData, premiumData] = await Promise.all([
         getFreeTips(),
         getPremiumTips(),
-        getPricingTiers(),
       ]);
 
       if (!mounted) return;
       setFreeTips(freeData);
       setPremiumTips(premiumData);
-      setPricingTiers(tiersData);
       if (initial) setLoading(false);
     };
 
@@ -510,24 +453,10 @@ export function TipsPage() {
             </div>
           </div>
 
-          {activeTab === 'premium' && paidTiers.length > 0 && (
-            <PremiumPlansPreview
-              paidTiers={paidTiers}
-              onUnlock={() => {
-                if (!user) setShowAuthModal(true);
-                else setShowPricingModal(true);
-              }}
-            />
-          )}
-
           {activeTab === 'archive' && (
             <VipArchivesBoard
               tips={premiumTips}
               premiumUnlocked={premiumUnlocked}
-              onUnlock={() => {
-                if (!user) setShowAuthModal(true);
-                else setShowPricingModal(true);
-              }}
             />
           )}
 
@@ -545,13 +474,9 @@ export function TipsPage() {
           ) : activeTab === 'premium' ? (
             <TipTable
               title="CYP Premium Picks"
-              subtitle={premiumUnlocked ? 'Full premium board (Pending matches).' : 'Premium board is visible, but pending predictions remain locked until subscription.'}
+              subtitle="Live premium board with pending matches visible to the public."
               tips={premiumTips.filter(tip => tip.result === 'pending')}
-              locked={!premiumUnlocked}
-              onUnlock={() => {
-                if (!user) setShowAuthModal(true);
-                else setShowPricingModal(true);
-              }}
+              locked={false}
             />
           ) : null}
         </div>

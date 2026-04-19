@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { Bell, BellRing, Menu, User, X, Star, HelpCircle, Zap, LogOut, MessageCircle } from 'lucide-react';
+import { Bell, BellRing, Menu, Shield, X, Star, HelpCircle, MessageCircle } from 'lucide-react';
 import { UserProfile } from './UserProfile';
 import { useUser } from '../context/UserContext';
 
@@ -11,7 +11,7 @@ const navItems = [
 ];
 
 export function Header() {
-  const { user, isLoggedIn, logout, setShowAuthModal, setShowPricingModal } = useUser();
+  const { user, setShowAuthModal } = useUser();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -85,32 +85,13 @@ export function Header() {
             </button>
 
             <button
-              onClick={() => isLoggedIn ? setIsProfileOpen(true) : setShowAuthModal(true)}
-              className="p-2 text-zinc-400 hover:text-white transition-all rounded-full hover:bg-zinc-800 hover:scale-110 active:scale-95"
-              title={isLoggedIn ? user?.username || 'Profile' : 'Sign In'}
+              onClick={() => (user?.is_admin ? setIsProfileOpen(true) : setShowAuthModal(true))}
+              className="inline-flex items-center gap-2 rounded-full border border-zinc-800 px-3 py-2 text-xs font-bold uppercase tracking-wider text-zinc-300 transition-all hover:border-blue-500/40 hover:text-white hover:bg-zinc-800/60"
+              title={user?.is_admin ? 'Admin Panel' : 'Admin Sign In'}
             >
-              {isLoggedIn ? (
-                user?.profile_picture ? (
-                  <img src={user.profile_picture} alt={user.username} className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover" />
-                ) : (
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] sm:text-xs font-bold">
-                    {user?.username?.charAt(0).toUpperCase()}
-                  </div>
-                )
-              ) : (
-                <User className="w-4 h-4 sm:w-5 sm:h-5" />
-              )}
+              <Shield className="w-4 h-4" />
+              <span className="hidden sm:inline">{user?.is_admin ? 'Admin' : 'Admin Login'}</span>
             </button>
-
-            {isLoggedIn && (
-              <button
-                onClick={logout}
-                className="hidden sm:block p-2 text-zinc-400 hover:text-red-400 transition-all rounded-full hover:bg-zinc-800 hover:scale-110 active:scale-95"
-                title="Sign Out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            )}
 
 
 

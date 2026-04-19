@@ -23,7 +23,7 @@ const NAV_ITEMS = [
 
 export function AdminLayout() {
   usePageTitle('Admin Console');
-  const { user } = useUser();
+  const { user, setShowAuthModal } = useUser();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -36,14 +36,26 @@ export function AdminLayout() {
         </div>
         <h2 className="text-2xl font-bold text-white mb-2 font-display">Access Denied</h2>
         <p className="text-zinc-400 text-center max-w-sm mb-6">
-          You do not have administrative privileges to access this console.
+          {!user
+            ? 'Admin authentication is required to access this console.'
+            : 'You do not have administrative privileges to access this console.'}
         </p>
-        <button
-          onClick={() => navigate('/')}
-          className="px-6 py-2.5 bg-zinc-800 text-zinc-300 rounded-xl hover:bg-zinc-700 transition-all text-sm font-medium"
-        >
-          Return to Homepage
-        </button>
+        <div className="flex gap-3">
+          {!user && (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 transition-all text-sm font-medium"
+            >
+              Admin Sign In
+            </button>
+          )}
+          <button
+            onClick={() => navigate('/')}
+            className="px-6 py-2.5 bg-zinc-800 text-zinc-300 rounded-xl hover:bg-zinc-700 transition-all text-sm font-medium"
+          >
+            Return to Homepage
+          </button>
+        </div>
       </div>
     );
   }

@@ -39,7 +39,7 @@ describe('buildVipArchiveTips', () => {
     expect(archive.map((tip) => tip.id)).toEqual(['1', '2', '3']);
   });
 
-  it('throttles visible losses for locked users at a 5:2 ratio', () => {
+  it('shows all settled premium results to the public once updated', () => {
     const tips = [
       makeTip(1, 'won', '2026-04-18T12:00:00Z'),
       makeTip(2, 'won', '2026-04-17T12:00:00Z'),
@@ -56,7 +56,7 @@ describe('buildVipArchiveTips', () => {
     const visibleLosses = archive.filter((tip) => tip.result === 'lost');
 
     expect(archive.every((tip) => tip.result !== 'pending')).toBe(true);
-    expect(visibleLosses).toHaveLength(2);
-    expect(archive.map((tip) => tip.id)).toEqual(['1', '2', '3', '4', '5', '6', '7']);
+    expect(visibleLosses).toHaveLength(3);
+    expect(archive.map((tip) => tip.id)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8']);
   });
 });
