@@ -8,7 +8,7 @@ import random
 import re
 import string
 from dataclasses import asdict, dataclass
-from datetime import datetime, UTC, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import select, text
@@ -19,6 +19,8 @@ from app.models.legacy_mpesa import LegacyMpesaTransaction
 from app.models.payment import Payment
 from app.models.user import User
 from app.security import hash_password
+
+UTC = timezone.utc
 
 
 @dataclass

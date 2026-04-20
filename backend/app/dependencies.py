@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from app.database import AsyncSessionLocal
 from app.security import decode_token
 
+UTC = timezone.utc
+
 security_scheme = HTTPBearer(auto_error=False)
 
 
@@ -279,4 +281,3 @@ async def require_admin(user=Depends(get_current_user)):
     if not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
-UTC = timezone.utc

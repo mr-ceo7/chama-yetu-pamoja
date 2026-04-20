@@ -8,6 +8,8 @@ from sqlalchemy.orm import relationship
 
 from app.database import Base
 
+UTC = timezone.utc
+
 
 class User(Base):
     __tablename__ = "users"
@@ -85,4 +87,3 @@ class UserSession(Base):
 
     # Relationship back to User
     user = relationship("User", back_populates="sessions")
-UTC = timezone.utc

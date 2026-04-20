@@ -23,6 +23,8 @@ except ImportError:
     AffiliateConversion = None
 from app.config import settings
 from app.routers.admin import get_referral_settings, get_sms_settings
+
+UTC = timezone.utc
 from app.routers.campaigns import track_campaign_event
 from app.models.activity import UserActivity, AnonymousVisitor, AnonymousActivity
 from app.schemas.auth import GoogleLoginRequest, PhoneLoginRequest, PhoneVerifyRequest, MagicLoginRequest, RefreshRequest, UserResponse, UpdateFavoritesRequest, PushSubscribeRequest, ActivityRequest
@@ -681,4 +683,3 @@ async def track_activity(
         
     await db.commit()
     return {"status": "ok"}
-UTC = timezone.utc

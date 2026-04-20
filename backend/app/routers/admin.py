@@ -40,6 +40,8 @@ from app.services.legacy_mpesa_sync import (
 )
 from app.config import settings
 
+UTC = timezone.utc
+
 import re
 import httpx
 import logging as _logging
@@ -2186,7 +2188,6 @@ async def delete_admin_ad(ad_id: int, db: AsyncSession = Depends(get_db), admin:
 # ═══════════════════════════════════════════════════════════════
 #  LEGACY M-PESA SYNC (Till 806277, filter 804633)
 # ═══════════════════════════════════════════════════════════════
-UTC = timezone.utc
 
 
 async def _assign_legacy_queue_item(

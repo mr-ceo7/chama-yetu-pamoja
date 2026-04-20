@@ -19,6 +19,9 @@ from app.models.payment import Payment
 from app.models.campaign import Campaign
 from app.models.jackpot import Jackpot, JackpotPurchase
 from app.models.subscription import SubscriptionTier
+
+UTC = timezone.utc
+
 try:
     from app.models.affiliate import Affiliate, AffiliateConversion, AffiliateCommissionConfig
 except ImportError:
@@ -656,4 +659,3 @@ async def get_payment_status(payment_id: int, db: AsyncSession = Depends(get_db)
         raise HTTPException(status_code=403, detail="Not authorized to view this payment")
         
     return payment
-UTC = timezone.utc

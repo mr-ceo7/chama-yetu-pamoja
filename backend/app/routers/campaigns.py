@@ -11,6 +11,8 @@ from app.models.campaign import Campaign
 from app.models.user import User
 from app.schemas.campaign import CampaignResponse, CampaignCreate, CampaignUpdate
 
+UTC = timezone.utc
+
 router = APIRouter(prefix="/api/campaigns", tags=["Campaigns"])
 
 @router.get("/active", response_model=CampaignResponse)
@@ -168,4 +170,3 @@ async def track_campaign_event(event_type: str, revenue: float = 0.0):
     except Exception as e:
         import logging
         logging.error(f"Error tracking campaign event: {e}")
-UTC = timezone.utc

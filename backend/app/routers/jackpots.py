@@ -16,6 +16,8 @@ from app.services.pricing import get_pricing_region
 from datetime import datetime, timedelta, timezone
 from fastapi import Query, BackgroundTasks
 
+UTC = timezone.utc
+
 router = APIRouter(prefix="/api/jackpots", tags=["Jackpots"])
 
 
@@ -283,4 +285,3 @@ async def delete_jackpot(jackpot_id: int, db: AsyncSession = Depends(get_db), ad
     await db.execute(delete(JackpotPurchase).where(JackpotPurchase.jackpot_id == jackpot_id))
     await db.delete(jp)
     await db.commit()
-UTC = timezone.utc
