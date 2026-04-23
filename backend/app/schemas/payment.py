@@ -11,6 +11,7 @@ class PaymentRequest(BaseModel):
     item_type: str  # subscription, jackpot
     item_id: str  # tier_id or jackpot_id
     duration_days: Optional[int] = None  # 5, 10, or 30 for subscriptions
+    email: Optional[str] = None
 
 
 class MpesaPaymentRequest(PaymentRequest):

@@ -6,7 +6,8 @@ import { authService } from '../services/authService';
 import { useGoogleOneTapLogin } from '@react-oauth/google';
 import { toast } from 'sonner';
 
-const USER_AUTH_DISABLED = true;
+const GOOGLE_ONE_TAP_DISABLED = true;
+let hasBootstrappedSession = false;
 
 // ---- Types ----
 export interface UserSubscription {
@@ -153,7 +154,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   // Restore session from backend on mount
   useEffect(() => {
-    refreshUser();
+    if (!hasBootstrappedSession) {
+      hasBootstrappedSession = true;
+      refreshUser();
+    }
 
     // Listen for unauthorized events to clear state
     const handleUnauthorized = () => setUser(null);
@@ -274,7 +278,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     onError: () => {
       console.error('Google One Tap Failed');
     },
-    disabled: !!user || USER_AUTH_DISABLED,
+    disabled: !!user || GOOGLE_ONE_TAP_DISABLED,
     cancel_on_tap_outside: false
   });
 
@@ -319,7 +323,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, [subscribeTo]);
 
   const hasAccess = useCallback((category: TipCategory): boolean => {
-    if (USER_AUTH_DISABLED) return true;
     if (!user) return category === 'free';
     // Check if subscription is expired
     if (user.subscription.expiresAt && new Date(user.subscription.expiresAt) < new Date()) {

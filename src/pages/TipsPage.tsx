@@ -16,7 +16,9 @@ import {
 import { format, isToday, isTomorrow, isYesterday } from 'date-fns';
 import { LeagueLogo, TeamWithLogo } from '../components/TeamLogo';
 import { SEO } from '../components/SEO';
+import { Pricing } from '../components/Pricing';
 import { getFreeTips, getPremiumTips, type Tip } from '../services/tipsService';
+import { useUser } from '../context/UserContext';
 
 type TipsTab = 'free' | 'premium' | 'archive';
 
@@ -295,14 +297,19 @@ function VipArchivesBoard({
 }
 
 export function TipsPage() {
+  const { hasAccess, setShowPricingModal } = useUser();
   const [activeTab, setActiveTab] = useState<TipsTab>('free');
   const [freeTips, setFreeTips] = useState<Tip[]>([]);
   const [premiumTips, setPremiumTips] = useState<Tip[]>([]);
   const [loading, setLoading] = useState(true);
   const [showScreenshotWarning, setShowScreenshotWarning] = useState(false);
 
-  const premiumUnlocked = true;
+  const premiumUnlocked = hasAccess('premium');
   const pendingPremium = premiumTips.filter((tip) => tip.result === 'pending').length;
+
+  const handlePremiumUnlock = () => {
+    setShowPricingModal(true, 'premium');
+  };
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -444,7 +451,7 @@ export function TipsPage() {
                     : activeTab === 'premium' 
                       ? (premiumUnlocked
                           ? 'Full premium board unlocked for your account'
-                          : 'One premium board. Subscribe once to unlock every paid tip')
+                          : 'Sign in and subscribe to unlock every pending premium pick')
                       : (premiumUnlocked
                           ? 'Full history of past premium results'
                           : 'Preview past premium performance. Subscribe to unlock history')}
@@ -472,12 +479,20 @@ export function TipsPage() {
               tips={freeTips}
             />
           ) : activeTab === 'premium' ? (
-            <TipTable
-              title="CYP Premium Picks"
-              subtitle="Live premium board with pending matches visible to the public."
-              tips={premiumTips.filter(tip => tip.result === 'pending')}
-              locked={false}
-            />
+            <div className="space-y-6">
+              {!premiumUnlocked && <Pricing />}
+              <TipTable
+                title="CYP Premium Picks"
+                subtitle={
+                  premiumUnlocked
+                    ? 'Live premium board unlocked for your account.'
+                    : 'Locked premium board. Sign in and subscribe to reveal each pending pick.'
+                }
+                tips={premiumTips.filter(tip => tip.result === 'pending')}
+                locked={!premiumUnlocked}
+                onUnlock={handlePremiumUnlock}
+              />
+            </div>
           ) : null}
         </div>
       </div>

@@ -4,6 +4,7 @@ export interface PaymentRequest {
   item_type: 'subscription' | 'jackpot';
   item_id: string;
   duration_weeks?: number;
+  duration_days?: number;
   phone?: string;
   email?: string;
   payment_method_id?: string;

@@ -26,6 +26,16 @@ const apiClient = axios.create({
   },
 });
 
+function shouldSkipRefresh(originalRequest: any): boolean {
+  const url = String(originalRequest?.url || '');
+  return (
+    originalRequest?._skipAuthRefresh === true ||
+    url === '/auth/refresh' ||
+    url === '/auth/google' ||
+    url === '/auth/me' ||
+    url === '/auth/activity'
+  );
+}
 
 // Interceptor to handle 401s and token refresh automatically
 apiClient.interceptors.response.use(
@@ -41,8 +51,7 @@ apiClient.interceptors.response.use(
     }
     
     // If error is 401 and request hasn't been retried yet
-    const isAuthRoute = originalRequest.url === '/auth/refresh' || originalRequest.url === '/auth/google';
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthRoute) {
+    if (error.response?.status === 401 && !originalRequest._retry && !shouldSkipRefresh(originalRequest)) {
       originalRequest._retry = true;
       try {
         // Try to get a new access token via HttpOnly cookies

@@ -4,15 +4,16 @@ All gateways are implemented but controlled by PAYMENTS_LIVE env flag.
 """
 
 import asyncio
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.config import settings
-from app.dependencies import get_db, get_current_user
+from app.dependencies import get_db, get_current_user, get_current_user_optional
 from app.services.payment_gateway import initiate_mpesa_stk
 from app.models.user import User
 from app.models.payment import Payment
@@ -30,6 +31,7 @@ except ImportError:
     AffiliateCommissionConfig = None
 from app.schemas.payment import MpesaPaymentRequest, PaymentRequest, PaymentResponse, MpesaCallbackData
 from app.services.email_service import send_payment_receipt_email
+from app.security import create_access_token, create_refresh_token, hash_password
 
 router = APIRouter(prefix="/api/pay", tags=["Payments"])
 
@@ -151,6 +153,83 @@ async def _resolve_amount(body: PaymentRequest, user: User, db: AsyncSession) ->
         return float(total_price), currency
     else:
         raise HTTPException(status_code=400, detail="Invalid item_type")
+
+
+def _normalize_checkout_phone(phone: str | None) -> str | None:
+    digits = re.sub(r"\D", "", phone or "")
+    if not digits:
+        return None
+    if digits.startswith("0") and len(digits) == 10:
+        digits = f"254{digits[1:]}"
+    elif digits.startswith("7") and len(digits) == 9:
+        digits = f"254{digits}"
+    elif digits.startswith("254") and len(digits) == 12:
+        pass
+    return f"+{digits}"
+
+
+def _build_guest_email(phone: str | None) -> str:
+    suffix = re.sub(r"\D", "", phone or "") or uuid.uuid4().hex[:12]
+    return f"guest-{suffix}@guest.chamayetutips.com"
+
+
+async def _resolve_checkout_user(body: PaymentRequest, db: AsyncSession, user: User | None) -> User:
+    if user:
+        return user
+
+    email = (body.email or "").strip().lower() or None
+    phone = _normalize_checkout_phone(getattr(body, "phone", None))
+
+    if not email and not phone:
+        raise HTTPException(status_code=400, detail="Phone or email is required to continue checkout")
+
+    existing_user = None
+    if email:
+        result = await db.execute(select(User).where(User.email == email))
+        existing_user = result.scalar_one_or_none()
+    if not existing_user and phone:
+        result = await db.execute(select(User).where(User.phone == phone))
+        existing_user = result.scalar_one_or_none()
+
+    if existing_user:
+        if not existing_user.is_active:
+            raise HTTPException(status_code=403, detail="Account disabled")
+        if phone and not existing_user.phone:
+            existing_user.phone = phone
+        if email and not existing_user.email:
+            existing_user.email = email
+        db.add(existing_user)
+        await db.commit()
+        await db.refresh(existing_user)
+        return existing_user
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    guest_user = User(
+        name=f"Chama User {(phone or email or uuid.uuid4().hex)[-6:]}",
+        email=email or _build_guest_email(phone),
+        password=hash_password(uuid.uuid4().hex),
+        phone=phone,
+        subscription_tier="free",
+        is_admin=False,
+        is_active=True,
+        email_verified_at=now if email else None,
+    )
+    db.add(guest_user)
+    await db.commit()
+    await db.refresh(guest_user)
+    return guest_user
+
+
+async def _issue_checkout_session(user: User, response: Response, db: AsyncSession):
+    from app.routers.auth import cleanup_expired_sessions, create_user_session
+
+    await cleanup_expired_sessions(user, db)
+    session_id = await create_user_session(user, db)
+    access_token = create_access_token(str(user.id), extra={"session_id": session_id})
+    refresh_token = create_refresh_token(str(user.id))
+
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="none", max_age=3600)
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=True, samesite="none", max_age=604800)
 
 
 async def _fulfill_payment(payment: Payment, user: User, db: AsyncSession):
@@ -297,7 +376,14 @@ async def _fulfill_payment(payment: Payment, user: User, db: AsyncSession):
 # ── M-Pesa ───────────────────────────────────────────────────
 
 @router.post("/mpesa", response_model=PaymentResponse)
-async def pay_mpesa(body: MpesaPaymentRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def pay_mpesa(
+    body: MpesaPaymentRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_current_user_optional),
+):
+    user = await _resolve_checkout_user(body, db, user)
+    await _issue_checkout_session(user, response, db)
     amount, currency = await _resolve_amount(body, user, db)
     if currency != "KES":
         raise HTTPException(status_code=400, detail="M-Pesa payments are only available in Kenya (KES)")
@@ -406,7 +492,14 @@ async def mpesa_callback(request: Request, secret: str = None, db: AsyncSession 
 # ── PayPal ───────────────────────────────────────────────────
 
 @router.post("/paypal", response_model=PaymentResponse)
-async def pay_paypal(body: PaymentRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def pay_paypal(
+    body: PaymentRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_current_user_optional),
+):
+    user = await _resolve_checkout_user(body, db, user)
+    await _issue_checkout_session(user, response, db)
     amount, currency = await _resolve_amount(body, user, db)
     reference = f"TT-PP-{uuid.uuid4().hex[:8].upper()}"
 
@@ -513,7 +606,14 @@ async def capture_paypal(token: str, PayerID: str, db: AsyncSession = Depends(ge
 # ── Skrill ───────────────────────────────────────────────────
 
 @router.post("/skrill", response_model=PaymentResponse)
-async def pay_skrill(body: PaymentRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def pay_skrill(
+    body: PaymentRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_current_user_optional),
+):
+    user = await _resolve_checkout_user(body, db, user)
+    await _issue_checkout_session(user, response, db)
     amount, currency = await _resolve_amount(body, user, db)
     reference = f"TT-SK-{uuid.uuid4().hex[:8].upper()}"
 
@@ -551,7 +651,14 @@ async def pay_skrill(body: PaymentRequest, db: AsyncSession = Depends(get_db), u
 # ── Paystack ─────────────────────────────────────────────────
 
 @router.post("/paystack", response_model=PaymentResponse)
-async def pay_paystack(body: PaymentRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def pay_paystack(
+    body: PaymentRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_current_user_optional),
+):
+    user = await _resolve_checkout_user(body, db, user)
+    await _issue_checkout_session(user, response, db)
     amount, currency = await _resolve_amount(body, user, db)
     reference = f"TT-PS-{uuid.uuid4().hex[:8].upper()}"
 

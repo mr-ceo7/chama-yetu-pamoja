@@ -146,8 +146,8 @@ export async function getFreeTips(): Promise<Tip[]> {
 }
 
 export async function getPremiumTips(): Promise<Tip[]> {
-  const tips = await getTodayTips();
-  return tips.filter(t => t.isPremium);
+  const res = await apiClient.get('/tips', { params: { is_free: false } });
+  return res.data.map(mapTip);
 }
 
 export async function getTipsByCategory(category: TipCategory): Promise<Tip[]> {

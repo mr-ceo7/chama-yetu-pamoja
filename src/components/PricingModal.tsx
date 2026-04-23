@@ -16,7 +16,13 @@ interface PricingModalProps {
   onClose: () => void;
 }
 
-const TIER_ICONS: Record<string, React.ElementType> = { basic: Zap, standard: Star, premium: Crown };
+const TIER_ICONS: Record<string, React.ElementType> = { basic: Zap, standard: Star, premium: Crown, '5day': Zap, '10day': Star, '30day': Crown };
+
+const MOBILE_TIER_NAMES: Record<string, string> = {
+  '5day': '5 Days',
+  '10day': '10 Days',
+  '30day': '30 Days',
+};
 
 // ── Module-level cache: pre-fetch on page load so modal opens instantly ──
 let _cachedTiers: TierConfig[] | null = null;
@@ -41,13 +47,14 @@ if (typeof document !== 'undefined' && !document.getElementById('paystack-script
 }
 
 export function PricingModal({ isOpen, onClose }: PricingModalProps) {
-  const { user, refreshUser, setShowAuthModal, targetCategory, targetTierId } = useUser();
+  const { user, refreshUser, targetCategory, targetTierId } = useUser();
   const [geoData, setGeoData] = useState<GeoData | null>(null);
   const [loadingGeo, setLoadingGeo] = useState(true);
   
   const [selectedTier, setSelectedTier] = useState<TierConfig | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<'mpesa' | 'paypal' | 'skrill' | 'paystack' | null>(null);
   const [phone, setPhone] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
   const [processing, setProcessing] = useState(false);
   const [tiers, setTiers] = useState<TierConfig[]>([]);
   const [paymentView, setPaymentView] = useState<'selection' | 'waiting' | 'success'>('selection');
@@ -61,6 +68,8 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
       setSelectedMethod(null);
       setSelectedTier(null);
       setShowAllTiers(false);
+      setPhone('');
+      setGuestEmail('');
       return;
     }
 
@@ -136,15 +145,10 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
   const allowMpesa = (selectedTier?.currency === 'KES') || (!selectedTier && geoData?.currency === 'KES');
 
   const handleCheckout = async () => {
-    if (!user) {
-      onClose();
-      setShowAuthModal(true);
-      toast.error('Please sign in first');
-      return;
-    }
     if (!selectedTier) { toast.error('Please select a plan'); return; }
     if (!selectedMethod) { toast.error('Please select a payment method'); return; }
     if (selectedMethod === 'mpesa' && (!phone || phone.length < 9)) { toast.error('Enter a valid phone number'); return; }
+    if (selectedMethod !== 'mpesa' && !user?.email && !guestEmail.trim()) { toast.error('Enter your email to continue'); return; }
 
     setProcessing(true);
     try {
@@ -153,6 +157,7 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
         item_id: selectedTier.id,
         duration_days: selectedTier.durationDays,
         phone: selectedMethod === 'mpesa' ? `254${phone.replace(/^0/, '')}` : undefined,
+        email: selectedMethod !== 'mpesa' ? (user?.email || guestEmail.trim()) : undefined,
       };
 
       let response;
@@ -172,7 +177,7 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
         const paystack = new (window as any).PaystackPop();
         paystack.newTransaction({
           key: paystackKey,
-          email: user?.email,
+          email: user?.email || guestEmail.trim(),
           accessCode: response.access_code,
           channels: ['card'],
           onSuccess: (transaction: any) => {
@@ -216,20 +221,20 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-lg bg-zinc-950 border-2 border-zinc-800 rounded-sm shadow-[8px_8px_0_rgba(245,158,11,0.3)] overflow-hidden flex flex-col max-h-[90vh]"
+            className="relative w-full max-w-lg bg-zinc-950 border-2 border-zinc-800 rounded-sm shadow-[8px_8px_0_rgba(245,158,11,0.3)] overflow-hidden flex flex-col max-h-[88vh] sm:max-h-[90vh]"
           >
-            <div className="bg-amber-500 px-4 py-3 relative flex items-center gap-3">
-              <Shield className="w-7 h-7 text-black/70 shrink-0" />
+            <div className="bg-amber-500 px-3 py-2.5 relative flex items-center gap-2.5 sm:px-4 sm:py-3 sm:gap-3">
+              <Shield className="w-6 h-6 text-black/70 shrink-0 sm:w-7 sm:h-7" />
               <div className="flex-1">
-                <h2 className="text-lg font-black text-black uppercase tracking-wide leading-tight">Premium Access</h2>
-                <p className="text-black/60 text-[11px] font-bold uppercase tracking-wider">Join the winning chama today.</p>
+                <h2 className="text-base font-black text-black uppercase tracking-wide leading-tight sm:text-lg">Premium Access</h2>
+                <p className="text-black/60 text-[10px] font-bold uppercase tracking-wider sm:text-[11px]">Join the winning chama today.</p>
               </div>
-              <button onClick={onClose} className="text-black/50 hover:text-black transition-colors" disabled={processing}>
+              <button onClick={onClose} className="text-black/50 hover:text-black transition-colors p-0.5" disabled={processing}>
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-4 overflow-y-auto">
+            <div className="p-3 overflow-y-auto sm:p-4">
               <AnimatePresence mode="wait">
                 {paymentView === 'selection' && tiers.length === 0 && (
                   <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="py-8 space-y-3">
@@ -245,26 +250,26 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                 )}
                 {paymentView === 'selection' && tiers.length > 0 && (
                   <motion.div key="selection" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
-                    <div className="mb-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{selectedTier ? 'Selected Plan' : 'Choose Plan'}</h3>
+                    <div className="mb-2.5 sm:mb-3">
+                      <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+                        <h3 className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest sm:text-[10px]">{selectedTier ? 'Selected Plan' : 'Choose Plan'}</h3>
                         {selectedTier && (
-                          <button onClick={() => setSelectedTier(null)} className="text-[10px] text-amber-400 hover:text-amber-300 font-bold uppercase tracking-wider py-1 transition-colors">
+                          <button onClick={() => setSelectedTier(null)} className="text-[9px] text-amber-400 hover:text-amber-300 font-bold uppercase tracking-wider py-1 transition-colors sm:text-[10px]">
                             Change Plan
                           </button>
                         )}
                       </div>
-                      <div className="rounded-sm border-2 border-zinc-800 bg-zinc-900/40 p-3 shadow-[4px_4px_0_rgb(39,39,42)]">
-                      <div className="mb-3 flex items-start justify-between gap-3 border-b border-zinc-800 pb-3">
+                      <div className="rounded-sm border-2 border-zinc-800 bg-zinc-900/40 p-2.5 shadow-[4px_4px_0_rgb(39,39,42)] sm:p-3">
+                      <div className="mb-2 flex items-start justify-between gap-2 border-b border-zinc-800 pb-2 sm:mb-3 sm:gap-3 sm:pb-3">
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-amber-400">Premium Plans Board</p>
-                          <p className="mt-1 text-xs text-zinc-400">Same premium board, different access durations.</p>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-amber-400 sm:text-[10px]">Premium Plans Board</p>
+                          <p className="mt-1 text-[11px] text-zinc-400 sm:text-xs">Same board, shorter access plans.</p>
                         </div>
-                        <div className="rounded-sm border border-zinc-800 bg-zinc-950 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                        <div className="rounded-sm border border-zinc-800 bg-zinc-950 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-zinc-400 sm:text-[10px]">
                           3 Plans
                         </div>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-1.5 sm:space-y-2">
                       {tiers.filter(t => {
                         if (t.id === 'free') return false; 
                         if (selectedTier) return selectedTier.id === t.id;
@@ -279,30 +284,30 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                           <button
                             key={tier.id}
                             onClick={() => setSelectedTier(tier)}
-                            className={`w-full flex items-center gap-3 p-3 rounded-sm border-2 transition-all text-left ${
+                            className={`w-full flex items-center gap-2 p-2.5 rounded-sm border-2 transition-all text-left sm:gap-3 sm:p-3 ${
                               isSelected 
                                 ? 'border-amber-500 bg-amber-500/10 shadow-[3px_3px_0_rgba(245,158,11,0.2)]' 
                                 : 'border-zinc-800 hover:border-zinc-700 bg-zinc-950/70 shadow-[3px_3px_0_rgb(39,39,42)]'
                             }`}
                           >
                             <div className={`p-1.5 rounded-sm shrink-0 ${isSelected ? 'bg-amber-500 text-black' : 'bg-zinc-800 text-zinc-400'}`}>
-                              <Icon className="w-4 h-4" />
+                              <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="font-bold text-white text-sm">{tier.name}</span>
+                                <span className="font-bold text-white text-[13px] sm:text-sm">{MOBILE_TIER_NAMES[tier.id] || tier.name}</span>
                                 {tier.popular && (
-                                  <span className="bg-amber-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Popular</span>
+                                  <span className="bg-amber-500 text-black text-[7px] font-black px-1 py-0.5 rounded-sm uppercase tracking-widest sm:text-[8px] sm:px-1.5">Popular</span>
                                 )}
                               </div>
-                              <div className="mt-0.5 text-[10px] text-zinc-500 truncate">{tier.description}</div>
+                              <div className="mt-0.5 hidden text-[10px] text-zinc-500 truncate sm:block">{tier.description}</div>
                             </div>
-                            <div className="text-right shrink-0">
+                            <div className="text-right shrink-0 pl-1">
                               {originalPrice ? (
                                 <div className="text-[10px] text-zinc-500 line-through decoration-red-500/50">{tier.currency_symbol} {defaultOriginalPrice.toLocaleString()}</div>
                               ) : null}
-                              <div className={`font-bold text-sm ${isSelected ? 'text-amber-400' : 'text-white'}`}>{tier.currency_symbol} {dprice.toLocaleString()}</div>
-                              <div className="text-[9px] text-zinc-500 font-bold uppercase">{tier.durationDays} Days</div>
+                              <div className={`font-bold text-[13px] sm:text-sm ${isSelected ? 'text-amber-400' : 'text-white'}`}>{tier.currency_symbol} {dprice.toLocaleString()}</div>
+                              <div className="text-[8px] text-zinc-500 font-bold uppercase sm:text-[9px]">{tier.durationDays} Days</div>
                             </div>
                             {isSelected && <Check className="w-4 h-4 text-amber-500 shrink-0" />}
                           </button>
@@ -312,20 +317,20 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                       </div>
                     </div>
 
-                    <div className="mb-3">
+                    <div className="mb-2.5 sm:mb-3">
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pay With</h3>
+                        <h3 className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest sm:text-[10px]">Pay With</h3>
                         {selectedMethod && <button onClick={() => setSelectedMethod(null)} className="text-[10px] text-gold-400 hover:text-gold-300 font-bold uppercase tracking-wider py-1 pl-4">Change</button>}
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                         {(!selectedMethod || selectedMethod === 'mpesa') && allowMpesa && (
-                          <button onClick={() => setSelectedMethod('mpesa')} className={`relative w-full flex items-center justify-center p-2.5 rounded-xl border-2 transition-all ${selectedMethod === 'mpesa' ? 'border-blue-500 bg-blue-600/10 col-span-2' : 'border-zinc-800 hover:border-zinc-700'}`}>
-                            <img src="/mpesa.svg" alt="M-Pesa" className="h-6 object-contain" />
-                            {selectedMethod === 'mpesa' && <Check className="absolute right-3 w-4 h-4 text-blue-500" />}
+                          <button onClick={() => setSelectedMethod('mpesa')} className={`relative w-full flex items-center justify-center p-2 rounded-lg border-2 transition-all sm:p-2.5 sm:rounded-xl ${selectedMethod === 'mpesa' ? 'border-blue-500 bg-blue-600/10 col-span-2' : 'border-zinc-800 hover:border-zinc-700'}`}>
+                            <img src="/mpesa.svg" alt="M-Pesa" className="h-5 object-contain sm:h-6" />
+                            {selectedMethod === 'mpesa' && <Check className="absolute right-2.5 w-3.5 h-3.5 text-blue-500 sm:right-3 sm:w-4 sm:h-4" />}
                           </button>
                         )}
                         {(!selectedMethod || selectedMethod === 'paystack') && (
-                          <button onClick={() => toast.info('Paystack integration is coming soon!')} className={`relative w-full flex items-center justify-center p-2.5 rounded-xl border-2 transition-all border-zinc-800 hover:border-zinc-700 opacity-50 cursor-not-allowed ${selectedMethod === 'paystack' ? 'col-span-2' : ''}`}>
+                          <button onClick={() => toast.info('Paystack integration is coming soon!')} className={`relative w-full flex items-center justify-center p-2 rounded-lg border-2 transition-all border-zinc-800 hover:border-zinc-700 opacity-50 cursor-not-allowed sm:p-2.5 sm:rounded-xl ${selectedMethod === 'paystack' ? 'col-span-2' : ''}`}>
                             <div className="flex items-center gap-2">
                               <div className="flex gap-1.5">
                                 <div className="bg-linear-to-r from-blue-700 to-blue-900 rounded-[3px] px-1.5 py-0.5 shadow-xs border border-blue-600 flex items-center justify-center">
@@ -343,14 +348,14 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                           </button>
                         )}
                         {(!selectedMethod || selectedMethod === 'paypal') && (
-                          <button onClick={() => setSelectedMethod('paypal')} className={`relative w-full flex items-center justify-center p-2.5 rounded-xl border-2 transition-all ${selectedMethod === 'paypal' ? 'border-blue-500 bg-blue-500/10 col-span-2' : 'border-zinc-800 hover:border-zinc-700'}`}>
-                            <img src="/paypal.svg" alt="PayPal" className="h-5 object-contain" />
-                            {selectedMethod === 'paypal' && <Check className="absolute right-3 w-4 h-4 text-blue-500" />}
+                          <button onClick={() => setSelectedMethod('paypal')} className={`relative w-full flex items-center justify-center p-2 rounded-lg border-2 transition-all sm:p-2.5 sm:rounded-xl ${selectedMethod === 'paypal' ? 'border-blue-500 bg-blue-500/10 col-span-2' : 'border-zinc-800 hover:border-zinc-700'}`}>
+                            <img src="/paypal.svg" alt="PayPal" className="h-4.5 object-contain sm:h-5" />
+                            {selectedMethod === 'paypal' && <Check className="absolute right-2.5 w-3.5 h-3.5 text-blue-500 sm:right-3 sm:w-4 sm:h-4" />}
                           </button>
                         )}
                         {(!selectedMethod || selectedMethod === 'skrill') && (
-                          <button onClick={() => toast.info('Skrill integration is coming soon!')} className={`relative w-full flex items-center justify-center p-2.5 rounded-xl border-2 transition-all border-zinc-800 hover:border-zinc-700 opacity-50 cursor-not-allowed ${selectedMethod === 'skrill' ? 'col-span-2' : ''}`}>
-                            <img src="/skrill.svg" alt="Skrill" className="h-7 object-contain" />
+                          <button onClick={() => toast.info('Skrill integration is coming soon!')} className={`relative w-full flex items-center justify-center p-2 rounded-lg border-2 transition-all border-zinc-800 hover:border-zinc-700 opacity-50 cursor-not-allowed sm:p-2.5 sm:rounded-xl ${selectedMethod === 'skrill' ? 'col-span-2' : ''}`}>
+                            <img src="/skrill.svg" alt="Skrill" className="h-6 object-contain sm:h-7" />
                             <div className="absolute right-2 text-[8px] font-bold text-purple-400 bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Soon</div>
                           </button>
                         )}
@@ -359,26 +364,43 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
 
                     <AnimatePresence>
                       {selectedMethod === 'mpesa' && (
-                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-4 overflow-hidden">
-                          <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-sm p-4 text-center mb-4 text-zinc-300 shadow-[2px_2px_0_rgba(245,158,11,0.15)]">
-                            <p className="text-[10px] uppercase tracking-widest font-black text-amber-500 mb-2">Manual M-Pesa Payment</p>
-                            <p className="text-[11px] mb-2 font-bold opacity-80">Lipa na M-Pesa • Buy Goods and Services</p>
-                            <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1 mt-4">Enter Till Number</p>
-                            <p className="text-4xl font-black text-white tracking-[0.1em] mb-4">806277</p>
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-3 overflow-hidden sm:mb-4">
+                          <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-sm p-3 text-center mb-3 text-zinc-300 shadow-[2px_2px_0_rgba(245,158,11,0.15)] sm:p-4 sm:mb-4">
+                            <p className="text-[9px] uppercase tracking-widest font-black text-amber-500 mb-1.5 sm:text-[10px] sm:mb-2">Manual M-Pesa Payment</p>
+                            <p className="text-[10px] mb-1.5 font-bold opacity-80 sm:text-[11px] sm:mb-2">Lipa na M-Pesa • Buy Goods and Services</p>
+                            <p className="text-[9px] uppercase tracking-widest text-zinc-500 mb-1 mt-3 sm:text-[10px] sm:mt-4">Enter Till Number</p>
+                            <p className="text-3xl font-black text-white tracking-[0.08em] mb-3 sm:text-4xl sm:tracking-[0.1em] sm:mb-4">806277</p>
                             <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1 opacity-70">Amount to Pay</p>
-                            <p className="text-xl font-black text-amber-400 mb-6">{selectedTier?.currency_symbol || 'KES'} {selectedTier?.price.toLocaleString()}</p>
-                            <div className="bg-zinc-950/80 p-3 rounded-sm border border-zinc-800">
-                              <p className="text-[9px] text-zinc-400 uppercase font-black tracking-wider leading-relaxed">Wait for the M-Pesa confirmation SMS, then enter your phone number below to verify your subscription.</p>
+                            <p className="text-lg font-black text-amber-400 mb-4 sm:text-xl sm:mb-6">{selectedTier?.currency_symbol || 'KES'} {selectedTier?.price.toLocaleString()}</p>
+                            <div className="bg-zinc-950/80 p-2.5 rounded-sm border border-zinc-800 sm:p-3">
+                              <p className="text-[8px] text-zinc-400 uppercase font-black tracking-wider leading-relaxed sm:text-[9px]">Wait for the M-Pesa confirmation SMS, then enter your phone number below to verify your subscription.</p>
                             </div>
                           </div>
                           
-                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1.5 pl-1">Safaricom Number used to pay</label>
+                          <label className="block text-[9px] font-bold text-zinc-500 uppercase mb-1 pl-1 sm:text-[10px] sm:mb-1.5">Safaricom Number used to pay</label>
                           <div className="flex bg-zinc-900 border-2 border-zinc-800 rounded-sm overflow-hidden focus-within:border-amber-500 transition-colors shadow-[2px_2px_0_rgb(39,39,42)]">
-                            <div className="px-3 py-3 bg-zinc-950 border-r-2 border-zinc-800 text-xs font-bold text-zinc-400 flex items-center gap-1.5">
+                            <div className="px-2.5 py-2.5 bg-zinc-950 border-r-2 border-zinc-800 text-[11px] font-bold text-zinc-400 flex items-center gap-1 sm:px-3 sm:py-3 sm:text-xs sm:gap-1.5">
                               <span>🇰🇪</span>
                               <span>+254</span>
                             </div>
-                            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712345678" className="w-full bg-transparent px-3 py-3 text-white text-sm font-black focus:outline-none font-mono tracking-widest placeholder:text-zinc-700" />
+                            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712345678" className="w-full bg-transparent px-3 py-2.5 text-white text-sm font-black focus:outline-none font-mono tracking-widest placeholder:text-zinc-700 sm:py-3" />
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <AnimatePresence>
+                      {selectedMethod !== 'mpesa' && !user?.email && (
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-3 overflow-hidden sm:mb-4">
+                          <label className="block text-[9px] font-bold text-zinc-500 uppercase mb-1 pl-1 sm:text-[10px] sm:mb-1.5">Email Address</label>
+                          <div className="flex bg-zinc-900 border-2 border-zinc-800 rounded-sm overflow-hidden focus-within:border-amber-500 transition-colors shadow-[2px_2px_0_rgb(39,39,42)]">
+                            <input
+                              type="email"
+                              value={guestEmail}
+                              onChange={(e) => setGuestEmail(e.target.value)}
+                              placeholder="you@example.com"
+                              className="w-full bg-transparent px-3 py-2.5 text-white text-sm focus:outline-none placeholder:text-zinc-700 sm:py-3"
+                            />
                           </div>
                         </motion.div>
                       )}
@@ -387,11 +409,11 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                     <button
                       onClick={handleCheckout}
                       disabled={processing || !selectedTier || !selectedMethod || loadingGeo}
-                      className="w-full bg-amber-500 text-black font-black py-3 rounded-sm border-2 border-amber-600 shadow-[4px_4px_0_rgb(217,119,6)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(217,119,6)] transition-all disabled:opacity-50 uppercase tracking-wider"
+                      className="w-full bg-amber-500 text-black font-black py-2.5 rounded-sm border-2 border-amber-600 shadow-[4px_4px_0_rgb(217,119,6)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(217,119,6)] transition-all disabled:opacity-50 uppercase tracking-wider sm:py-3"
                     >
                       {processing ? 'Processing...' : selectedMethod === 'mpesa' ? 'Verify Payment' : `Get ${selectedTier?.name || 'Started'}`}
                     </button>
-                    <p className="text-center text-[9px] text-zinc-500 mt-2 uppercase tracking-widest font-bold">Instant access granted after payment</p>
+                    <p className="text-center text-[8px] text-zinc-500 mt-1.5 uppercase tracking-widest font-bold sm:text-[9px] sm:mt-2">Instant access granted after payment</p>
                   </motion.div>
                 )}
 

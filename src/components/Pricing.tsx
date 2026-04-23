@@ -1,158 +1,143 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Zap, Star, Crown } from 'lucide-react';
-import { getPricingTiers, type TierConfig, CATEGORY_LABELS } from '../services/pricingService';
+import { getPricingTiers, type TierConfig } from '../services/pricingService';
 import { useUser } from '../context/UserContext';
 
 const TIER_ICONS: Record<string, React.ElementType> = {
-  basic: Zap,
-  standard: Star,
-  premium: Crown,
+  '5day': Zap,
+  '10day': Star,
+  '30day': Crown,
 };
 
-const TIER_COLORS: Record<string, { border: string; glow: string; button: string; badge: string }> = {
-  basic: {
+const MOBILE_TIER_NAMES: Record<string, string> = {
+  '5day': '5D Trial',
+  '10day': '10D Premium',
+  '30day': '30D VIP',
+};
+
+const TIER_STYLES: Record<string, { border: string; icon: string; price: string; button: string; badge: string }> = {
+  '5day': {
     border: 'border-zinc-700',
-    glow: '',
-    button: 'bg-zinc-700 text-white hover:bg-zinc-600',
-    badge: '',
+    icon: 'bg-zinc-800 text-zinc-300',
+    price: 'text-white',
+    button: 'bg-zinc-800 text-white hover:bg-zinc-700 border border-zinc-700',
+    badge: 'bg-zinc-800 text-zinc-200',
   },
-  standard: {
-    border: 'border-blue-500',
-    glow: 'shadow-xl shadow-blue-500/10',
-    button: 'bg-blue-600 text-white hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/20',
+  '10day': {
+    border: 'border-blue-500/50 shadow-lg shadow-blue-500/10',
+    icon: 'bg-blue-500/15 text-blue-300',
+    price: 'text-blue-300',
+    button: 'bg-blue-600 text-white hover:bg-blue-500',
     badge: 'bg-blue-600 text-white',
   },
-  premium: {
-    border: 'border-gold-500/50',
-    glow: 'shadow-xl shadow-gold-500/10',
-    button: 'bg-gold-500 text-zinc-950 hover:bg-gold-400 hover:shadow-lg hover:shadow-gold-500/20',
-    badge: '',
+  '30day': {
+    border: 'border-amber-500/40 shadow-lg shadow-amber-500/10',
+    icon: 'bg-amber-500/15 text-amber-300',
+    price: 'text-amber-300',
+    button: 'bg-amber-500 text-zinc-950 hover:bg-amber-400',
+    badge: 'bg-amber-500 text-zinc-950',
   },
 };
 
 export function Pricing() {
-  const [duration, setDuration] = useState<'2wk' | '4wk'>('2wk');
   const [tiers, setTiers] = useState<TierConfig[]>([]);
-  const { user, setShowAuthModal, setShowPricingModal } = useUser();
+  const { setShowPricingModal } = useUser();
 
   useEffect(() => {
     getPricingTiers().then(setTiers);
   }, []);
 
-  const handleSelect = () => {
-    if (!user) setShowAuthModal(true);
-    else setShowPricingModal(true);
+  const paidTiers = useMemo(
+    () => tiers.filter((tier) => tier.id !== 'free').sort((a, b) => a.durationDays - b.durationDays),
+    [tiers]
+  );
+
+  const handleSelect = (tier: TierConfig) => {
+    setShowPricingModal(true, 'premium', String(tier.id));
   };
 
   return (
-    <div className="py-8 sm:py-12">
-      <div className="text-center mb-8 sm:mb-10 px-4">
-        <h2 className="text-2xl sm:text-3xl font-display font-bold text-white mb-3 sm:mb-4">Choose Your Plan</h2>
-        <p className="text-sm sm:text-base text-zinc-400 max-w-xl mx-auto mb-6">
-          Stop guessing. Start winning. Get access to our expert predictions.
-        </p>
-
-        {/* Duration Toggle */}
-        <div className="inline-flex items-center bg-zinc-900 rounded-xl border border-zinc-800 p-1">
-          <button
-            onClick={() => setDuration('2wk')}
-            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${
-              duration === '2wk'
-                ? 'bg-blue-600 text-white shadow-lg'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            2 Weeks
-          </button>
-          <button
-            onClick={() => setDuration('4wk')}
-            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all relative ${
-              duration === '4wk'
-                ? 'bg-blue-600 text-white shadow-lg'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            4 Weeks
-            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">SAVE</span>
-          </button>
+    <section className="rounded-sm border border-zinc-800 bg-zinc-950/85 p-2.5 shadow-[4px_4px_0_rgb(39,39,42)] sm:p-5">
+      <div className="mb-2.5 flex items-center gap-2 sm:mb-4">
+        <div className="rounded-lg bg-amber-500/15 p-2 text-amber-300">
+          <Crown className="h-4 w-4 sm:h-5 sm:w-5" />
+        </div>
+        <div>
+          <h2 className="text-sm font-black uppercase tracking-wide text-white sm:text-xl">Choose Your Plan</h2>
+          <p className="text-[9px] text-zinc-500 sm:text-xs">Unlock premium before the tips board below.</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-6 max-w-5xl mx-auto px-4 sm:px-0">
-        {tiers.map((tier) => {
-          const colors = TIER_COLORS[tier.id] || TIER_COLORS.basic;
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-4">
+        {paidTiers.map((tier) => {
           const Icon = TIER_ICONS[tier.id] || Zap;
-          const price = duration === '2wk' ? tier.price2wk : tier.price4wk;
-          const originalPrice = duration === '2wk' ? tier.originalPrice2wk : tier.originalPrice4wk;
+          const style = TIER_STYLES[tier.id] || TIER_STYLES['5day'];
+          const billingLabel = tier.durationDays === 1 ? '1 day' : `${tier.durationDays} days`;
 
           return (
-            <div 
+            <article
               key={tier.id}
-              className={`relative rounded-2xl border ${colors.border} ${tier.popular ? colors.glow : ''} bg-zinc-950/50 p-5 sm:p-6 flex flex-col backdrop-blur-sm`}
+              className={`relative flex min-w-0 flex-col rounded-lg border bg-zinc-950/70 p-2 sm:rounded-2xl sm:p-4 ${style.border}`}
             >
               {tier.popular && (
-                <div className={`absolute -top-3 left-1/2 -translate-x-1/2 ${colors.badge} text-[10px] sm:text-xs font-bold uppercase tracking-wider py-1 px-3 rounded-full whitespace-nowrap`}>
-                  Most Popular
+                <div className={`absolute right-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider sm:right-3 sm:top-3 sm:px-2 sm:text-[9px] ${style.badge}`}>
+                  Popular
                 </div>
               )}
-              
-              <div className="mb-5 sm:mb-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className={`p-2 rounded-lg ${tier.id === 'premium' ? 'bg-gold-500/20 text-gold-400' : tier.id === 'standard' ? 'bg-blue-600/20 text-blue-400' : 'bg-zinc-800 text-zinc-400'}`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-base sm:text-lg font-bold text-white">{tier.name}</h3>
+
+              <div className="mb-1.5 flex items-start gap-1.5 sm:mb-3 sm:gap-2">
+                <div className={`rounded-md p-1.5 sm:rounded-lg sm:p-2 ${style.icon}`}>
+                  <Icon className="h-3 w-3 sm:h-4 sm:w-4" />
                 </div>
-                <p className="text-xs sm:text-sm text-zinc-400 h-10">{tier.description}</p>
+                <div className="min-w-0 pt-0.5">
+                  <h3 className="text-[11px] font-bold leading-tight text-white sm:hidden">{MOBILE_TIER_NAMES[tier.id] || tier.name}</h3>
+                  <h3 className="hidden text-base font-bold leading-tight text-white sm:block">{tier.name}</h3>
+                  <p className="mt-1 hidden text-xs leading-5 text-zinc-400 sm:block">{tier.description}</p>
+                </div>
               </div>
-              
-              <div className="mb-5 sm:mb-6">
-                {originalPrice ? (
-                  <div className="flex flex-col mb-1">
-                     <span className="text-sm text-zinc-500 line-through decoration-red-500/50 decoration-2">{tier.currency_symbol || 'KES'} {originalPrice.toLocaleString(undefined, {minimumFractionDigits: originalPrice % 1 !== 0 ? 2 : 0})}</span>
-                     <div className="flex items-baseline gap-2">
-                       <span className="text-2xl sm:text-3xl font-display font-bold text-blue-400">{tier.currency_symbol || 'KES'} {price.toLocaleString(undefined, {minimumFractionDigits: price % 1 !== 0 ? 2 : 0})}</span>
-                       <span className="text-xs sm:text-sm text-zinc-500">/{duration === '2wk' ? '2 weeks' : '4 weeks'}</span>
-                     </div>
+
+              <div className="mb-2 sm:mb-4">
+                {tier.originalPrice ? (
+                  <div className="mb-1 text-[9px] text-zinc-500 line-through sm:text-xs">
+                    {tier.currency_symbol || 'KES'} {tier.originalPrice.toLocaleString()}
                   </div>
-                ) : (
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl sm:text-3xl font-display font-bold text-white">{tier.currency_symbol || 'KES'} {price.toLocaleString(undefined, {minimumFractionDigits: price % 1 !== 0 ? 2 : 0})}</span>
-                    <span className="text-xs sm:text-sm text-zinc-500">/{duration === '2wk' ? '2 weeks' : '4 weeks'}</span>
+                ) : null}
+                <div className="flex flex-col items-start gap-0.5 sm:flex-row sm:items-end sm:gap-2">
+                  <div className={`text-sm font-black leading-none tracking-tight sm:text-3xl ${style.price}`}>
+                    {(tier.currency_symbol || 'KES') === 'KES' ? 'KES ' : `${tier.currency_symbol || 'KES'} `}
+                    {tier.price.toLocaleString()}
                   </div>
-                )}
+                  <div className="text-[8px] font-bold uppercase tracking-wider text-zinc-500 sm:pb-1 sm:text-[10px]">
+                    / {billingLabel}
+                  </div>
+                </div>
               </div>
-              
-              {/* Included categories */}
-              <ul className="mb-6 sm:mb-8 flex-1 space-y-2.5 sm:space-y-3">
-                {tier.categories.filter(c => c !== 'free').map((cat) => (
-                  <li key={cat} className="flex items-start gap-2.5 sm:gap-3 text-xs sm:text-sm text-zinc-300">
-                    <Check className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500 shrink-0 mt-0.5" />
-                    <span>{CATEGORY_LABELS[cat]?.label || cat}</span>
-                  </li>
-                ))}
-                <li className="flex items-start gap-2.5 sm:gap-3 text-xs sm:text-sm text-zinc-300">
-                  <Check className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500 shrink-0 mt-0.5" />
-                  <span>Free daily tips included</span>
-                </li>
-                {tier.id === 'premium' && (
-                  <li className="flex items-start gap-2.5 sm:gap-3 text-xs sm:text-sm text-zinc-300">
-                    <Check className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500 shrink-0 mt-0.5" />
-                    <span>Priority support & alerts</span>
-                  </li>
-                )}
-              </ul>
-              
-              <button 
-                onClick={handleSelect}
-                className={`w-full py-2.5 sm:py-3 px-4 rounded-xl text-sm sm:text-base font-bold transition-all hover:scale-105 active:scale-95 ${colors.button}`}
+
+              <div className="mb-2 flex-1 text-[9px] text-zinc-400 sm:mb-4 sm:text-xs">
+                <div className="hidden sm:block">
+                  <div className="flex items-center gap-1.5">
+                    <Check className="h-3 w-3 shrink-0 text-blue-400" />
+                    <span>Premium Tips</span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <Check className="h-3 w-3 shrink-0 text-blue-400" />
+                    <span>Free tips included</span>
+                  </div>
+                </div>
+                <div className="sm:hidden text-[8px] font-medium leading-tight text-zinc-500">Premium + Free</div>
+              </div>
+
+              <button
+                onClick={() => handleSelect(tier)}
+                className={`mt-auto w-full rounded-lg px-1.5 py-1.5 text-[9px] font-black uppercase tracking-wider transition-all sm:rounded-xl sm:px-4 sm:py-2.5 sm:text-xs ${style.button}`}
               >
-                Get {tier.name}
+                <span className="sm:hidden">Get</span>
+                <span className="hidden sm:inline">Get {tier.name}</span>
               </button>
-            </div>
+            </article>
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

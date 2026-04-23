@@ -14,7 +14,7 @@ export function AuthModal() {
 
     const result = await googleLogin(credentialResponse.credential);
     if (result.success) {
-      toast.success('Admin sign-in successful');
+      toast.success('Sign-in successful');
       handleClose();
     } else {
       setError(result.error || 'Google Authentication failed');
@@ -51,10 +51,10 @@ export function AuthModal() {
                 </div>
                 <div>
                   <h2 className="text-lg font-black text-black uppercase tracking-wide">
-                    Admin Sign In
+                    Sign In
                   </h2>
                   <p className="text-[11px] text-black/60 font-bold uppercase tracking-wider">
-                    Authorized administrators only
+                    Unlock premium access
                   </p>
                 </div>
               </div>
@@ -69,7 +69,7 @@ export function AuthModal() {
             <div className="p-6">
               <div className="mb-4 text-center">
                 <p className="text-sm text-zinc-300">
-                  Use the approved Google account to access the Chama admin console.
+                  Sign in with Google to continue to premium checkout and manage your access.
                 </p>
               </div>
 
