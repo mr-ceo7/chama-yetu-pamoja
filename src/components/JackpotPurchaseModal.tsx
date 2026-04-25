@@ -83,17 +83,12 @@ export function JackpotPurchaseModal({ isOpen, onClose, jackpot }: JackpotPurcha
       return;
     }
 
-    if (selectedMethod === 'mpesa' && (!phone || phone.length < 9)) {
-      toast.error('Please enter a valid Safaricom number');
-      return;
-    }
-
     setProcessing(true);
     try {
       const payload = {
         item_type: 'jackpot' as const,
         item_id: jackpot.id,
-        phone: selectedMethod === 'mpesa' ? `254${phone.replace(/^0/, '')}` : undefined,
+        phone: undefined,
       };
 
       let response;
@@ -240,20 +235,7 @@ export function JackpotPurchaseModal({ isOpen, onClose, jackpot }: JackpotPurcha
                       </div>
                     </div>
 
-                    <AnimatePresence>
-                      {selectedMethod === 'mpesa' && (
-                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-5 overflow-hidden">
-                          <label className="block text-xs font-bold text-zinc-500 uppercase mb-2">Safaricom phone number</label>
-                          <div className="flex bg-zinc-800 border border-zinc-700 rounded-xl overflow-hidden focus-within:border-gold-500 transition-all">
-                            <div className="px-4 py-3 bg-zinc-900 border-r border-zinc-700 text-sm text-zinc-400 flex items-center gap-2">
-                              <span>🇰🇪</span>
-                              <span>+254</span>
-                            </div>
-                            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="712345678" className="w-full bg-transparent px-4 py-3 text-white focus:outline-hidden font-mono" />
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                    {/* Phone input hidden for now */}
 
                     <button
                       onClick={handleCheckout}
@@ -270,9 +252,7 @@ export function JackpotPurchaseModal({ isOpen, onClose, jackpot }: JackpotPurcha
                     <div className="w-16 h-16 border-4 border-gold-500/20 border-t-gold-500 rounded-full animate-spin mb-6" />
                     <h3 className="text-xl font-bold text-white mb-2">Verifying Payment...</h3>
                     <p className="text-zinc-400 text-center text-sm max-w-xs mb-8">
-                      {selectedMethod === 'mpesa'
-                        ? 'Please check your phone for the M-Pesa prompt and enter your PIN.'
-                        : 'Verifying your payment with the provider. Please do not close this window.'}
+                      Verifying your payment with the provider. Please do not close this window.
                     </p>
                   </motion.div>
                 )}

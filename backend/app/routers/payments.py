@@ -406,26 +406,9 @@ async def pay_mpesa(
     await db.refresh(payment)
 
     if settings.PAYMENTS_LIVE:
-        try:
-            result = await initiate_mpesa_stk(phone=body.phone, amount=amount, reference=reference)
-            payment.gateway_response = str(result)
-            
-            # Safaricom returns 'CheckoutRequestID' on success
-            if result.get("ResponseCode") == "0":
-                payment.transaction_id = result.get("CheckoutRequestID")
-                await db.commit()
-            else:
-                payment.status = "failed"
-                await db.commit()
-        except Exception as e:
-            import traceback
-            payment.status = "error"
-            payment.gateway_response = repr(e)
-            await db.commit()
-            print(f"M-Pesa Exact Error: {repr(e)}")
-            traceback.print_exc()
-            detail = f"M-Pesa initiation failed: {repr(e)}" if settings.PAYMENTS_LIVE and settings.DEBUG else "M-Pesa initiation failed. Please try again later."
-            raise HTTPException(status_code=502, detail=detail)
+        # STK disabled for now
+        payment.status = "pending"
+        await db.commit()
     else:
         # Simulate: auto-complete after short delay
         await asyncio.sleep(1)

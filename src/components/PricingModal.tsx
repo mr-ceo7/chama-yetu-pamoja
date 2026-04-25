@@ -147,8 +147,7 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
   const handleCheckout = async () => {
     if (!selectedTier) { toast.error('Please select a plan'); return; }
     if (!selectedMethod) { toast.error('Please select a payment method'); return; }
-    if (selectedMethod === 'mpesa' && (!phone || phone.length < 9)) { toast.error('Enter a valid phone number'); return; }
-    if (selectedMethod !== 'mpesa' && !user?.email && !guestEmail.trim()) { toast.error('Enter your email to continue'); return; }
+    if (!user?.email && !guestEmail.trim()) { toast.error('Enter your email to continue'); return; }
 
     setProcessing(true);
     try {
@@ -156,8 +155,8 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
         item_type: 'subscription' as const,
         item_id: selectedTier.id,
         duration_days: selectedTier.durationDays,
-        phone: selectedMethod === 'mpesa' ? `254${phone.replace(/^0/, '')}` : undefined,
-        email: selectedMethod !== 'mpesa' ? (user?.email || guestEmail.trim()) : undefined,
+        phone: undefined,
+        email: user?.email || guestEmail.trim(),
       };
 
       let response;
@@ -373,24 +372,15 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                             <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1 opacity-70">Amount to Pay</p>
                             <p className="text-lg font-black text-amber-400 mb-4 sm:text-xl sm:mb-6">{selectedTier?.currency_symbol || 'KES'} {selectedTier?.price.toLocaleString()}</p>
                             <div className="bg-zinc-950/80 p-2.5 rounded-sm border border-zinc-800 sm:p-3">
-                              <p className="text-[8px] text-zinc-400 uppercase font-black tracking-wider leading-relaxed sm:text-[9px]">Wait for the M-Pesa confirmation SMS, then enter your phone number below to verify your subscription.</p>
+                              <p className="text-[8px] text-zinc-400 uppercase font-black tracking-wider leading-relaxed sm:text-[9px]">Please complete your payment to the Till Number above, then proceed below to verify your subscription.</p>
                             </div>
-                          </div>
-                          
-                          <label className="block text-[9px] font-bold text-zinc-500 uppercase mb-1 pl-1 sm:text-[10px] sm:mb-1.5">Safaricom Number used to pay</label>
-                          <div className="flex bg-zinc-900 border-2 border-zinc-800 rounded-sm overflow-hidden focus-within:border-amber-500 transition-colors shadow-[2px_2px_0_rgb(39,39,42)]">
-                            <div className="px-2.5 py-2.5 bg-zinc-950 border-r-2 border-zinc-800 text-[11px] font-bold text-zinc-400 flex items-center gap-1 sm:px-3 sm:py-3 sm:text-xs sm:gap-1.5">
-                              <span>🇰🇪</span>
-                              <span>+254</span>
-                            </div>
-                            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712345678" className="w-full bg-transparent px-3 py-2.5 text-white text-sm font-black focus:outline-none font-mono tracking-widest placeholder:text-zinc-700 sm:py-3" />
                           </div>
                         </motion.div>
                       )}
                     </AnimatePresence>
 
                     <AnimatePresence>
-                      {selectedMethod !== 'mpesa' && !user?.email && (
+                      {!user?.email && (
                         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-3 overflow-hidden sm:mb-4">
                           <label className="block text-[9px] font-bold text-zinc-500 uppercase mb-1 pl-1 sm:text-[10px] sm:mb-1.5">Email Address</label>
                           <div className="flex bg-zinc-900 border-2 border-zinc-800 rounded-sm overflow-hidden focus-within:border-amber-500 transition-colors shadow-[2px_2px_0_rgb(39,39,42)]">
@@ -422,9 +412,7 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                     <div className="w-16 h-16 border-4 border-zinc-800 border-t-amber-500 rounded-full animate-spin mb-6" />
                     <h3 className="text-xl font-bold text-white mb-2 text-center">Verifying Payment...</h3>
                     <p className="text-zinc-400 text-center text-sm max-w-xs mb-8">
-                      {selectedMethod === 'mpesa' 
-                        ? 'Please check your phone for the M-Pesa PIN prompt to complete your order.' 
-                        : 'Verifying your payment with the provider. Please do not close this window.'}
+                      Verifying your payment with the provider. Please do not close this window.
                     </p>
                   </motion.div>
                 )}
