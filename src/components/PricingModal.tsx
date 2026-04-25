@@ -372,7 +372,7 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                             <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1 opacity-70">Amount to Pay</p>
                             <p className="text-lg font-black text-amber-400 mb-4 sm:text-xl sm:mb-6">{selectedTier?.currency_symbol || 'KES'} {selectedTier?.price.toLocaleString()}</p>
                             <div className="bg-zinc-950/80 p-2.5 rounded-sm border border-zinc-800 sm:p-3">
-                              <p className="text-[8px] text-zinc-400 uppercase font-black tracking-wider leading-relaxed sm:text-[9px]">Please complete your payment to the Till Number above, then proceed below to verify your subscription.</p>
+                              <p className="text-[8px] text-zinc-400 uppercase font-black tracking-wider leading-relaxed sm:text-[9px]">Please complete your payment to the Till Number above. Your account will be upgraded.</p>
                             </div>
                           </div>
                         </motion.div>
@@ -380,7 +380,7 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                     </AnimatePresence>
 
                     <AnimatePresence>
-                      {!user?.email && (
+                      {!user?.email && selectedMethod !== 'mpesa' && (
                         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-3 overflow-hidden sm:mb-4">
                           <label className="block text-[9px] font-bold text-zinc-500 uppercase mb-1 pl-1 sm:text-[10px] sm:mb-1.5">Email Address</label>
                           <div className="flex bg-zinc-900 border-2 border-zinc-800 rounded-sm overflow-hidden focus-within:border-amber-500 transition-colors shadow-[2px_2px_0_rgb(39,39,42)]">
@@ -396,14 +396,18 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
                       )}
                     </AnimatePresence>
 
-                    <button
-                      onClick={handleCheckout}
-                      disabled={processing || !selectedTier || !selectedMethod || loadingGeo}
-                      className="w-full bg-amber-500 text-black font-black py-2.5 rounded-sm border-2 border-amber-600 shadow-[4px_4px_0_rgb(217,119,6)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(217,119,6)] transition-all disabled:opacity-50 uppercase tracking-wider sm:py-3"
-                    >
-                      {processing ? 'Processing...' : selectedMethod === 'mpesa' ? 'Verify Payment' : `Get ${selectedTier?.name || 'Started'}`}
-                    </button>
-                    <p className="text-center text-[8px] text-zinc-500 mt-1.5 uppercase tracking-widest font-bold sm:text-[9px] sm:mt-2">Instant access granted after payment</p>
+                    {selectedMethod !== 'mpesa' && (
+                      <>
+                        <button
+                          onClick={handleCheckout}
+                          disabled={processing || !selectedTier || !selectedMethod || loadingGeo}
+                          className="w-full bg-amber-500 text-black font-black py-2.5 rounded-sm border-2 border-amber-600 shadow-[4px_4px_0_rgb(217,119,6)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(217,119,6)] transition-all disabled:opacity-50 uppercase tracking-wider sm:py-3"
+                        >
+                          {processing ? 'Processing...' : `Get ${selectedTier?.name || 'Started'}`}
+                        </button>
+                        <p className="text-center text-[8px] text-zinc-500 mt-1.5 uppercase tracking-widest font-bold sm:text-[9px] sm:mt-2">Instant access granted after payment</p>
+                      </>
+                    )}
                   </motion.div>
                 )}
 
